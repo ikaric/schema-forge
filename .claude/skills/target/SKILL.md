@@ -36,7 +36,9 @@ confirm it — but never invent acceptance you can't simulate.
 
 ## 2. Scaffold `design/`
 
-Write, using the user's answers:
+`PROBLEM.md`, `spec.md`, `ROADMAP.md`, and `LOG.md` already exist in template
+form, so **Read each before overwriting it** (the editor requires a read first);
+`design-report.md` is new. Write, using the user's answers:
 
 - **`design/PROBLEM.md`** — frontmatter (`title`, `domain`, `tier`) + the
   statement as the markdown body.
