@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Env
+.env
+.envrc
+
+# Node / frontend
+node_modules/
+frontend/dist/
+.vite/
+
+# Built SPA served by the backend (run `make build` to regenerate)
+backend/src/schema_forge/static/
+
+# Per-clone local sentinels (pause flags etc.), never committed
+.claude/local/
+
+# Simulation raw dumps (bulky, regenerable). Netlists, schematics, plots,
+# and state.json ARE committed so the design history lives in git.
+design/sims/*.raw
+*.raw
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

@@ -1,0 +1,29 @@
+{
+  "initialized": false,
+  "problem": {
+    "title": "",
+    "domain": "",
+    "tier": "",
+    "statement": "No circuit problem has been targeted yet.\n\nRun **`/target`** in Claude Code to describe the circuit and its target spec, or\n**`make seed-example`** to load the worked diode-clipping overdrive example."
+  },
+  "spec": null,
+  "roadmap": {
+    "subgoals": [],
+    "vectors": [],
+    "progress": {
+      "done": 0,
+      "total": 0
+    }
+  },
+  "log": [
+    {
+      "ts": "template",
+      "source": "schema-forge",
+      "level": "info",
+      "message": "Clone created from template. Run `/target` to begin."
+    }
+  ],
+  "current": {},
+  "report_present": false,
+  "updated_at": "2026-06-28T18:40:05Z"
+}

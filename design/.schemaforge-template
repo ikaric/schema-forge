@@ -1,0 +1,4 @@
+This file marks an un-targeted schema-forge clone (the template state).
+
+`/target` (or `make seed-example`) removes it once a circuit problem is defined.
+While it exists, the live UI shows the "not targeted yet" state.
