@@ -62,11 +62,15 @@ form, so **Read each before overwriting it** (the editor requires a read first);
 - Ensure the UI is up so the user can watch: if nothing is serving :8000, start
   it in the background — `make dev` (or `uv run uvicorn schema_forge.api.asgi:app
   --port 8000`). Tell the user to open **http://127.0.0.1:8000**.
-- For a **T1** clone, you may immediately ask the librarian for the known
-  reference topology, have the circuit-designer draft it, and run one
-  `uv run schema-forge sim run` so the user sees a first result.
+
+**Bootstrap only — do NOT design, draft a netlist, or simulate here.** `/target`
+scaffolds the problem and then stops. Drafting netlists, running ngspice, and
+iterating to meet the spec are entirely `/solve`'s job — keeping that boundary is
+what makes `/target` fast and finite (no design loop to get stuck in). Even a
+"known" reference circuit (T1) still needs `/solve` to build and verify it.
 
 ## 4. Commit
 
 Commit `target: initialize <circuit name>` (author = the user; **no** Claude
-co-author trailer). Push. Then tell the user to run **`/solve`**.
+co-author trailer). Push. **Stop here** and tell the user to run **`/solve`** to
+begin the design loop.
