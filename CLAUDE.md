@@ -45,6 +45,16 @@ The single source of these verdicts is one command (see *Running a simulation*).
 Never hand-write a `verified`. If you didn't run the simulation this session,
 you don't know it's verified.
 
+**Never modify the harness itself.** You design circuits — your only writeable
+surface is `design/` (netlists, markdown, artifacts). Do **not** edit the
+`schema_forge` backend, and *especially* not `backend/src/schema_forge/sim/`
+(the ngspice runner, result parsers, assertions) — that is the trust root. An
+agent that can patch its own verifier can make a bad circuit "pass", silently
+destroying the only guarantee this harness has. If the tooling looks broken or
+limited, **stop and report it** (a note in `findings/` and to the user) — do not
+fix it yourself. Repairing the harness is a separate, human-supervised task on
+the `schema-forge` template, never something `/solve` does mid-design.
+
 ## Persona
 
 Naive in approach, skilled in execution. Do not refuse a hard design because it

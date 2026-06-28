@@ -11,6 +11,12 @@ Resume and advance the design. Runs unattended; the user watches on
 here — make the most reasonable decision from the spec + repo precedent and
 record non-obvious choices in `findings/decision-*.md`.
 
+**You only ever write to `design/`** (netlists, markdown, artifacts). Never edit
+the `schema_forge` backend — the runner, parsers, and assertions are the trust
+root, and patching them could fake a pass. If the simulation tooling looks broken
+or limited, **halt and report it**; do not fix it yourself (see CLAUDE.md
+*Never modify the harness itself*).
+
 ## Pacing (self-looping — no `/loop` wrapper)
 
 - bare `/solve` — run an iteration, then schedule the next with a 60 s gap.
