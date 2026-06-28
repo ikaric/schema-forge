@@ -5,7 +5,7 @@ PORT ?= 8000
 HOST ?= 127.0.0.1
 NETLIST ?= design/netlists/main.cir
 
-.PHONY: help init setup build serve dev frontend-dev seed-fuzzface seed-overdrive sim test lint format typecheck check clean
+.PHONY: help init setup build serve dev frontend-dev sim test lint format typecheck check clean
 
 help:
 	@echo "Setup:"
@@ -18,9 +18,7 @@ help:
 	@echo "  build         Build the React SPA into the backend static dir"
 	@echo "  frontend-dev  Vite dev server on :5173 (proxies to the backend) for UI hacking"
 	@echo ""
-	@echo "Design loop:"
-	@echo "  seed-fuzzface  Load the Fuzz Face design target (the go-to test; no netlist)"
-	@echo "  seed-overdrive Load the worked overdrive example (ships a netlist)"
+	@echo "Design loop (after /target):"
 	@echo "  sim            Run a netlist through ngspice + assert vs spec"
 	@echo "                   make sim NETLIST=design/netlists/<name>.cir"
 	@echo ""
@@ -46,12 +44,6 @@ dev: build
 
 frontend-dev:
 	cd frontend && npm run dev
-
-seed-fuzzface:
-	$(UV) run python scripts/seed_example.py fuzzface
-
-seed-overdrive:
-	$(UV) run python scripts/seed_example.py overdrive
 
 sim:
 	$(UV) run python -m schema_forge.sim run $(NETLIST) --spec design/spec.md

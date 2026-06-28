@@ -22,8 +22,8 @@ chose and why, the key component values, and which spec assertions it targets.
   fail, so design for a clean DC bias first.
 - Include the analyses the spec needs (`.op`, `.ac dec …`, `.tran …`, `.four`)
   and **`.measure`/`.four` cards whose result names exactly match each spec
-  assertion's `measure` field** — that is how the design is checked. Mirror the
-  style of `examples/overdrive/overdrive.cir`.
+  assertion's `measure` field** — that is how the design is checked. Keep the
+  netlist in the classic dot-card style ngspice (and the SPICE corpus) expect.
 - Optionally embed a hand-laid CircuitJS view between `* @circuitjs-begin` and
   `* @circuitjs-end` comment lines for a cleaner interactive schematic.
 - When revising from simulator feedback, address the **specific** errors or

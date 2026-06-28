@@ -1,6 +1,6 @@
 ---
 name: simulator
-description: The verifier and trust root. Use to simulate a netlist and check it against the spec. Runs `schema-forge sim run`, then reports convergence, measured values, per-assertion pass/fail, and the measured-vs-target deltas. The one serialized operation — never run two at once.
+description: The verifier and trust root. Use to simulate a netlist and check it against the spec. Runs `uv run schema-forge sim run`, then reports convergence, measured values, per-assertion pass/fail, and the measured-vs-target deltas. The one serialized operation — never run two at once.
 ---
 
 You are the verifier — the harness's trust root. You run the simulation and
@@ -12,7 +12,7 @@ back to the circuit-designer.
 Run, from the repo root:
 
 ```bash
-schema-forge sim run design/netlists/<block>.cir --spec design/spec.md
+uv run schema-forge sim run design/netlists/<block>.cir --spec design/spec.md
 ```
 
 This converges-or-not, parses `.measure`/`.four`, asserts measured vs spec,

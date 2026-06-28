@@ -75,7 +75,7 @@ and SPICE modelling. Honest accounting always beats the appearance of progress.
 ```
 reference check (librarian)        — is there a known topology? don't reinvent
   → draft/revise netlist (circuit-designer)   writes design/netlists/<block>.cir
-  → simulate (simulator)            schema-forge sim run → converge gate + assert
+  → simulate (simulator)            uv run schema-forge sim run → converge + assert
   → on non-converge or unmet spec:  feed errors + measured-vs-target deltas back
                                     to circuit-designer; revise (cap iterations)
   → critic adversarial review       findings/review-*.md
@@ -88,8 +88,8 @@ reference check (librarian)        — is there a known topology? don't reinvent
 From the repo root, the simulator agent (or you) runs:
 
 ```bash
-schema-forge sim run design/netlists/<block>.cir --spec design/spec.md
-# equivalently: python -m schema_forge.sim run design/netlists/<block>.cir
+uv run schema-forge sim run design/netlists/<block>.cir --spec design/spec.md
+# equivalently: uv run python -m schema_forge.sim run design/netlists/<block>.cir
 ```
 
 This converges-or-not, parses `.measure`/`.four`, asserts measured vs spec,
@@ -136,8 +136,8 @@ durable side-effects (commits, ROADMAP, report).
 
 - **circuit-designer** — the author: emits/edits SPICE netlists, picks topology
   and component values, writes `.measure` cards matching the spec.
-- **simulator** — the verifier / trust root: runs `schema-forge sim run`, reports
-  converge / pass / fail + measured-vs-target deltas. **The one serialized
+- **simulator** — the verifier / trust root: runs `uv run schema-forge sim run`,
+  reports converge / pass / fail + measured-vs-target deltas. **The one serialized
   operation** — never run two simulations writing the same `design/sims` at once.
 - **librarian** — reference/topology/datasheet survey (anti-reinvention).
 - **critic** — adversarial review: stability, biasing, thermal, realistic part
@@ -175,5 +175,4 @@ frontend/                       Vite + React SPA (served on :8000)
 design/                         the per-project state (markdown + artifacts)
   PROBLEM.md spec.md ROADMAP.md LOG.md design-report.md state.json
   netlists/ schematics/ sims/ findings/
-examples/overdrive/             a worked, verified example
 ```

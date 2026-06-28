@@ -13,7 +13,7 @@ do not ask the user questions.
 ## Steps
 
 1. **Refresh artifacts** — re-run the verified design once so every artifact is
-   current: `schema-forge sim run design/netlists/<final>.cir --spec
+   current: `uv run schema-forge sim run design/netlists/<final>.cir --spec
    design/spec.md`. Confirm it is still `verified` (exit 0). If it regressed,
    stop and report — do not polish a failing design.
 2. **Assemble `design/design-report.md`** — a datasheet-style document:

@@ -27,6 +27,6 @@ user's intent is unclear.
 
 ## After any mode
 
-- Refresh the rollup: `schema-forge state > /dev/null`.
+- Refresh the rollup: `uv run schema-forge state > /dev/null`.
 - Commit `vector: <add|retire|pivot> <summary>` (no Claude co-author) and push.
 - Tell the user to resume with `/solve`.

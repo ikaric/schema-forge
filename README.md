@@ -59,18 +59,17 @@ add, retire, or pivot topology strategies between sessions.
 
 ### Go-to test: design a Fuzz Face
 
-The bundled go-to test is the classic **Fuzz Face** — a minimal two-transistor
-fuzz that's simple but genuinely nonlinear. It ships as a *target only* (problem
-+ spec, no netlist), so you watch the harness actually design it:
+The reference test is the classic two-transistor **Fuzz Face** — minimal, but
+genuinely nonlinear (a DC-coupled feedback pair driven hard into clipping).
+Clone fresh, `/target` it, and watch the harness design and tune it:
 
-```bash
-make seed-fuzzface   # load the Fuzz Face problem + spec into design/
-make dev             # http://127.0.0.1:8000
-/solve               # watch schema-forge design + tune the circuit
+```text
+/target   # describe a 9 V NPN Fuzz Face and its spec:
+          #   output biased ~mid-supply, gain ≥ 25 dB, THD ≥ 10 %, hard clipping
+/solve    # watch schema-forge design + tune the circuit on :8000
 ```
 
-There's also a simpler `make seed-overdrive` (a diode clipper that *ships* a
-netlist) for exercising the simulate-and-verify pipeline directly.
+Nothing is bundled — the template ships empty, like a fresh project should.
 
 ## How verification works (the trust root)
 
@@ -98,12 +97,11 @@ schema-forge/
 ├── design/             # PER-PROJECT STATE (markdown-driven; the "issues" replacement)
 │   ├── PROBLEM.md  spec.md  ROADMAP.md  LOG.md  design-report.md  state.json
 │   └── netlists/  schematics/  sims/  findings/
-├── examples/overdrive/ # a worked diode-clipping example proving the loop
 └── CLAUDE.md           # operating instructions loaded every session
 ```
 
 The same `schema_forge` package powers two things: an **agent-facing CLI**
-(`python -m schema_forge.sim run <netlist> --spec design/spec.md`) that runs the
+(`uv run schema-forge sim run <netlist> --spec design/spec.md`) that runs the
 verify cycle and writes artifacts into `design/`, and the **human-facing server**
 that reads `design/` and streams it to the UI over a WebSocket.
 

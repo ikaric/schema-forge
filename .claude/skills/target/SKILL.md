@@ -39,12 +39,13 @@ confirm it — but never invent acceptance you can't simulate.
 Write, using the user's answers:
 
 - **`design/PROBLEM.md`** — frontmatter (`title`, `domain`, `tier`) + the
-  statement as the body. Match `examples/overdrive/PROBLEM.md`.
+  statement as the markdown body.
 - **`design/spec.md`** — human-readable prose + a fenced ```json block holding
   `{title, analyses, assertions:[{id, measure, op, target, unit, desc}]}`.
   Each assertion's `measure` is the exact name of an ngspice `.measure`/`.four`
   result the netlist will produce. Ops: `>=` `<=` `>` `<` `==` `~=` (with `tol`)
-  `between` (target `[lo,hi]`). Model it on `examples/overdrive/spec.md`.
+  `between` (target `[lo,hi]`). The prose table is for humans; the ```json block
+  is what the harness parses.
 - **`design/ROADMAP.md`** — one sub-goal checkbox per assertion, an
   `## Attack vectors` section (seed at least one candidate topology), and a
   `## Progress` line `0 / N sub-goals verified.`
@@ -55,13 +56,13 @@ Write, using the user's answers:
 ## 3. Activate
 
 - Remove the template marker: `rm design/.schemaforge-template`.
-- Refresh the rollup: `schema-forge state > /dev/null` (writes `design/state.json`).
+- Refresh the rollup: `uv run schema-forge state > /dev/null` (writes `design/state.json`).
 - Ensure the UI is up so the user can watch: if nothing is serving :8000, start
   it in the background — `make dev` (or `uv run uvicorn schema_forge.api.asgi:app
   --port 8000`). Tell the user to open **http://127.0.0.1:8000**.
 - For a **T1** clone, you may immediately ask the librarian for the known
   reference topology, have the circuit-designer draft it, and run one
-  `schema-forge sim run` so the user sees a first result.
+  `uv run schema-forge sim run` so the user sees a first result.
 
 ## 4. Commit
 

@@ -50,7 +50,7 @@ is not yet passing). Then:
    **must** include `.measure`/`.four` cards whose names match the spec
    assertions' `measure` fields.
 3. **Simulate** — dispatch **simulator** to run
-   `schema-forge sim run design/netlists/<block>.cir --spec design/spec.md`.
+   `uv run schema-forge sim run design/netlists/<block>.cir --spec design/spec.md`.
    This is the trust root. It writes the schematic, plots, result JSON, and LOG,
    so the UI updates immediately. Only ever run **one** simulation at a time.
 4. **Feedback** — if non-convergent or an assertion is unmet, hand the simulator's
@@ -66,7 +66,7 @@ is not yet passing). Then:
 
 ## Step 3 — session end
 
-Refresh the rollup (`schema-forge state > /dev/null`), recompute the `ROADMAP.md`
+Refresh the rollup (`uv run schema-forge state > /dev/null`), recompute the `ROADMAP.md`
 progress meter, update `STATUS.md` (focus + blocker), commit `status: <summary>`,
 and push.
 
