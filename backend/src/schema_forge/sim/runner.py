@@ -71,20 +71,10 @@ def _classify(output: str) -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
-def run_ngspice(
-    netlist_path: str | Path,
-    *,
-    settings: Settings | None = None,
-    raw_name: str = "out.raw",
-    workdir: str | Path | None = None,
-) -> NgspiceResult:
-    """Invoke ``ngspice -b`` on *netlist_path* and return a classified result."""
-    settings = settings or get_settings()
-    netlist_path = Path(netlist_path).resolve()
-    cwd = Path(workdir).resolve() if workdir else netlist_path.parent
-    raw_path = cwd / raw_name
-
-    cmd = [settings.ngspice_bin, "-b", "-r", str(raw_path), str(netlist_path)]
+def _run_once(
+    cmd: list[str], settings: Settings, cwd: Path
+) -> tuple[int, str, str]:
+    """Run one ngspice invocation; return (returncode, stdout, stderr)."""
     try:
         proc = subprocess.run(
             cmd,
@@ -93,30 +83,61 @@ def run_ngspice(
             timeout=settings.sim_timeout_s,
             cwd=str(cwd),
         )
+        return proc.returncode, proc.stdout, proc.stderr
+    except subprocess.TimeoutExpired as exc:
+        return (
+            124,
+            _as_text(exc.stdout),
+            _as_text(exc.stderr)
+            + f"\nngspice timed out after {settings.sim_timeout_s}s",
+        )
+
+
+def run_ngspice(
+    netlist_path: str | Path,
+    *,
+    settings: Settings | None = None,
+    raw_name: str = "out.raw",
+    workdir: str | Path | None = None,
+) -> NgspiceResult:
+    """Run a netlist through ngspice (batch) and classify convergence.
+
+    Two passes are required: ``ngspice -b -r <rawfile>`` *disables* ``.measure``
+    and ``.four`` ("No .measure possible in batch mode (-b) with -r rawfile
+    set!"). So we run once **without** ``-r`` to capture the measurement output
+    that verification depends on, and once **with** ``-r`` to write the rawfile
+    used only for the signal plots. The measures (the trust root) never depend on
+    the rawfile pass.
+    """
+    settings = settings or get_settings()
+    netlist_path = Path(netlist_path).resolve()
+    cwd = Path(workdir).resolve() if workdir else netlist_path.parent
+    raw_path = cwd / raw_name
+    base = [settings.ngspice_bin, "-b"]
+
+    # Pass 1 — measurements (no -r). Authoritative for convergence + measures.
+    try:
+        m_rc, m_out, m_err = _run_once(base + [str(netlist_path)], settings, cwd)
     except FileNotFoundError as exc:
         raise NgspiceNotFoundError(
             f"'{settings.ngspice_bin}' not found on PATH. Install ngspice "
             "(e.g. `sudo pacman -S ngspice` / `brew install ngspice`)."
         ) from exc
-    except subprocess.TimeoutExpired as exc:
-        return NgspiceResult(
-            returncode=124,
-            stdout=_as_text(exc.stdout),
-            stderr=_as_text(exc.stderr)
-            + f"\nngspice timed out after {settings.sim_timeout_s}s",
-            raw_path=raw_path if raw_path.exists() else None,
-            converged=False,
-            errors=[f"simulation exceeded {settings.sim_timeout_s}s timeout"],
-        )
+    # Pass 2 — rawfile for plots (with -r). Measures are intentionally disabled.
+    r_rc, _r_out, _r_err = _run_once(
+        base + ["-r", str(raw_path), str(netlist_path)], settings, cwd
+    )
 
-    errors, warnings = _classify(proc.stdout + "\n" + proc.stderr)
+    errors, warnings = _classify(f"{m_out}\n{m_err}")
+    if 124 in (m_rc, r_rc):
+        errors.append(f"simulation exceeded {settings.sim_timeout_s}s timeout")
     has_raw = raw_path.exists() and raw_path.stat().st_size > 0
     converged = not errors and has_raw
 
     return NgspiceResult(
-        returncode=proc.returncode,
-        stdout=proc.stdout,
-        stderr=proc.stderr,
+        returncode=m_rc,
+        stdout=m_out,
+        stderr=m_err,
         raw_path=raw_path if has_raw else None,
         converged=converged,
         errors=errors,

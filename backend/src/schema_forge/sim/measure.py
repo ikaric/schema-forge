@@ -18,9 +18,11 @@ _MEASURE_RE = re.compile(
     r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\b"
 )
 _FAILED_RE = re.compile(r"\bmeasure(?:ment)?\s+([A-Za-z_]\w*)\b.*\bfail", re.IGNORECASE)
-# ngspice `.four` prints e.g. "Total Harmonic Distortion: 12.345678 percent".
+# ngspice `.four` prints THD as e.g. "  No. Harmonics: 10, THD: 117.617 %, ...".
+# (Some tools spell it out as "Total Harmonic Distortion: 12.3 percent".)
 _THD_RE = re.compile(
-    r"total harmonic distortion:\s*([0-9.]+)\s*(?:percent|%)", re.IGNORECASE
+    r"(?:THD|total harmonic distortion)\s*[:=]\s*([0-9.]+)\s*(?:percent|%)",
+    re.IGNORECASE,
 )
 
 
@@ -37,8 +39,9 @@ def parse_measures(log: str) -> tuple[dict[str, float], list[str]]:
         if not m:
             continue
         name = m.group(1).lower()
-        # Skip header-ish noise that happens to look like an assignment.
-        if name in {"no", "title", "date", "plotname", "flags", "variables"}:
+        # Skip header-ish / resource-report noise that looks like an assignment
+        # (e.g. ngspice prints "Stack = 0 bytes." at the end of a batch run).
+        if name in {"no", "title", "date", "plotname", "flags", "variables", "stack"}:
             continue
         try:
             values[name] = float(m.group(2))

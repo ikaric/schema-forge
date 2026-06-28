@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from schema_forge.sim.measure import parse_measures
 
+# Mirrors real ngspice-46 batch output (no -r): scalar `.meas` lines, a failed
+# measure, the `.four` THD line ("THD: N %"), and the trailing resource report.
 LOG = """
 Doing analysis at TEMP = 27.0
 vout_pp             =  1.402000e+00
@@ -12,7 +14,8 @@ gain_db             = -2.5
 Measurement corner FAILED
 
 Fourier analysis for v(clip):
-Total Harmonic Distortion: 8.421000 percent
+  No. Harmonics: 10, THD: 8.421 %, Gridsize: 200, Interpolation Degree: 1
+Stack = 0 bytes.
 """
 
 
@@ -31,6 +34,12 @@ def test_failed_measure_collected() -> None:
 def test_four_thd_captured() -> None:
     vals, _ = parse_measures(LOG)
     assert abs(vals["thd"] - 8.421) < 1e-6
+
+
+def test_resource_report_noise_skipped() -> None:
+    # ngspice's "Stack = 0 bytes." must not be parsed as a measure.
+    vals, _ = parse_measures(LOG)
+    assert "stack" not in vals
 
 
 def test_header_noise_ignored() -> None:
