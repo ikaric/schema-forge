@@ -1,0 +1,258 @@
+% example-report.tex — CANONICAL WORKED EXAMPLE of a schema-forge design report.
+% This is the structure/style /polish must mirror. It is a *reference*, not a
+% real verified design: the "Sunrise Overdrive" content and numbers are
+% illustrative, and the figures it \includegraphics (sunrise.pdf, plot-*.pdf)
+% are the per-design artifacts /polish renders for the ACTUAL circuit (the
+% schematic via `schema_forge.render schematic` -> SVG -> rsvg-convert -> PDF,
+% the plots from the verified sim). When authoring design/design-report.tex:
+%   * copy this skeleton, keep every section in this order,
+%   * swap in the real circuit's title/spec/BOM/measured numbers,
+%   * point the figures at design/schematics/<final>.pdf and the sim plots,
+%   * use \schematicpage for the landscape schematic (never a raw figure —
+%     it bounds the image inside the header/footer),
+%   * build with .claude/skills/polish/assets/build-report.sh.
+% Every class feature is exercised below: cover setters + \sfmaketitle, the
+% blue/green/olive \callout boxes, \sfhead/\sfgrouprow zebra tables, and
+% \schematicpage. See schemaforge-report.cls for the full API.
+\documentclass{schemaforge-report}
+
+\setdoctitle{Sunrise Overdrive}
+\setguidekind{Design \& Build Guide}
+\setfootleft{two-transistor silicon drive}
+\setfootstatus{verified 10/10 $\cdot$ SPICE}
+
+\setcovereyebrow{SCHEMA-FORGE $\cdot$ VERIFIED BY SIMULATION}
+\setcovertitle{Sunrise\\Overdrive}
+\setcoversubtitle{A two-transistor silicon overdrive with a symmetric diode clipper}
+\setcovertopics{Design rationale $\cdot$ schematic $\cdot$ simulated results $\cdot$ bill of materials $\cdot$ build notes}
+\setcoverstatus{ngspice: converged $\cdot$ 10\,/\,10 spec assertions pass $\cdot$ exit 0}
+\setcovermeta{%
+  \metalabel{Topology} & Two common-emitter gain stages around a symmetric silicon-diode clipper\\
+  \metalabel{Supply}   & 9\,V single rail, audio ground\\
+  \metalabel{Voicing}  & smooth, mid-forward drive $\approx$11\% THD with a passive treble-cut tone\\
+  \metalabel{Status}   & \textbf{10/10 verified} $\cdot$ single converged ngspice run\\
+  \metalabel{Generated}& 2026-06-30\\
+}
+
+\begin{document}
+\sfmaketitle
+
+\begin{callout}{blue}{What you are holding}
+This is the complete engineering record for a discrete \textbf{silicon overdrive} --- a smooth,
+mid-forward drive built from two common-emitter stages around a symmetric diode clipper --- and
+\emph{verified by SPICE simulation} rather than by ear. Every performance claim in this guide is
+backed by a machine-checked assertion: the design is called ``verified'' only because ngspice
+converged \emph{and} all ten target assertions passed against the measured results. Where a number
+appears (a bias point, a gain, a distortion figure), it is the value the simulator measured.
+\end{callout}
+
+\section{What this is}
+The overdrive is the gentler cousin of the fuzz: instead of letting the transistors themselves
+collapse into a gated square wave, a dedicated \emph{clipping element} rounds the peaks off a clean,
+amplified signal. Here that element is a pair of back-to-back silicon diodes shunting the signal to
+ground. Below their forward drop the signal passes untouched; above it the diodes conduct and softly
+flatten the peaks, adding the harmonic warmth that defines the drive.
+
+This guide documents a \textbf{two-stage discrete} version on a single 9\,V rail. The first stage
+sets the drive into the clipper; the second recovers level and drives a passive tone and volume
+network. Three design goals shape it:
+\begin{itemize}
+  \item \textbf{Symmetric clipping} for an even, vocal break-up rather than a harsh buzz.
+  \item \textbf{A stable bias} so the operating point does not wander with supply or temperature.
+  \item \textbf{A buffer-friendly input} and a quiet, mix-ready output stage.
+\end{itemize}
+
+\begin{callout}{green}{The honesty contract}
+A design was only ever tagged \textbf{verified} when two things were true at once: ngspice
+\emph{converged} on a solution (a broken or unphysical circuit will not solve), \emph{and} every
+assertion in the target specification passed against the measured \texttt{.measure}/\texttt{.control}
+results. No assertion was weakened to make a design pass.
+\end{callout}
+
+\section{How it works --- the signal path}
+\subsection{The two gain stages}
+The guitar enters through a series input resistor and a coupling capacitor onto the base of
+\texttt{Q1}, a common-emitter stage biased from a stiff divider. Its emitter degeneration is
+AC-bypassed, so the stage runs at full gain while the unbypassed DC path holds the bias steady. The
+amplified signal is then AC-coupled into the clipper.
+
+\subsection{The diode clipper}
+Two silicon diodes (\texttt{D1}, \texttt{D2}) sit anti-parallel from the clipper node to ground. The
+symmetry is what gives this voicing its smooth, even character --- the positive and negative
+excursions are flattened identically, so the harmonic content is dominated by odd harmonics with a
+gentle roll-off. A second stage, \texttt{Q2}, recovers the level lost across the clipper's series
+resistance and presents a low impedance to the tone network.
+
+\begin{callout}{olive}{Why the clipper sits between two stages}
+The clipper is deliberately placed \emph{after} the first gain stage and \emph{before} the second.
+Clipping a small signal directly off the pickup would need impractically low diode drops; clipping a
+fully recovered output would waste headroom. Driving the diodes from a stage already at full gain
+puts the signal well past the silicon knee at normal playing level, while the recovery stage restores
+a usable output --- the gain budget is split so each block does one job.
+\end{callout}
+
+\section{Research \& prior art}
+The topology is the canonical ``two-transistor boost into a shunt diode clipper'' that underlies a
+whole family of discrete drives. The reference values below were the starting point; the simulator
+then tuned them to the spec.
+\begin{table}[h]
+\centering\small\sffamily
+\rowcolors{2}{white}{sfZebra}
+\begin{tabular}{@{}lll@{}}
+\sfhead{Element} & \sfheadcell{Stock value} & \sfheadcell{Role}\\
+Input cap     & 0.1\,$\mu$F & couples the guitar onto \texttt{Q1}\\
+\texttt{Q1} load   & 10\,k$\Omega$ & first-stage gain\\
+Clipper diodes& 1N4148 $\times$2 & symmetric silicon clipping\\
+Clipper load  & 47\,k$\Omega$ & sets drive into the diodes\\
+\texttt{Q2} load   & 10\,k$\Omega$ & recovery stage\\
+Tone cap      & 10\,nF & passive treble-cut pivot\\
+Volume pot    & 100\,k$\Omega$ & master output level\\
+\end{tabular}
+\caption{Reference discrete-overdrive values used as the starting point.}
+\end{table}
+
+\section{The specification}
+The target was captured as ten machine-checkable assertions before any circuit was drawn. Each names
+a measurement the netlist must produce; the design is \textbf{verified} only when all ten pass in one
+converged run. The measured column is the simulator's own parse of the final netlist.
+
+\begin{table}[h]
+\centering\small\sffamily
+\rowcolors{2}{white}{sfZebra}
+\begin{tabular}{@{}lllrll@{}}
+\sfhead{Sub-goal} & \sfheadcell{Measure} & \sfheadcell{Target} & \sfheadcell{Measured} & \sfheadcell{Unit} & \sfheadcell{Status}\\
+bias\_q1  & vc1\_bias  & 4.0--6.0 (between) & 4.92  & V  & \textbf{\textcolor{sfGreen}{PASS}}\\
+bias\_q2  & vc2\_bias  & 4.0--6.0 (between) & 5.08  & V  & \textbf{\textcolor{sfGreen}{PASS}}\\
+gain      & gain\_db   & $\geq 30$          & 38.50 & dB & \textbf{\textcolor{sfGreen}{PASS}}\\
+drive\_thd& thd\_max   & $\geq 8$           & 11.20 & \% & \textbf{\textcolor{sfGreen}{PASS}}\\
+cleanup   & thd\_clean & $\leq 3$           & 0.94  & \% & \textbf{\textcolor{sfGreen}{PASS}}\\
+symmetry  & clip\_asym & $\leq 5$           & 1.80  & \% & \textbf{\textcolor{sfGreen}{PASS}}\\
+input\_z  & zin        & $\geq 100$         & 138.0 & k$\Omega$ & \textbf{\textcolor{sfGreen}{PASS}}\\
+low\_corner& f\_lo     & $\leq 90$          & 38.00 & Hz & \textbf{\textcolor{sfGreen}{PASS}}\\
+tone\_range& tone\_db  & $\geq 8$           & 12.40 & dB & \textbf{\textcolor{sfGreen}{PASS}}\\
+out\_swing & vout\_pp  & $\geq 2.0$         & 4.40  & V  & \textbf{\textcolor{sfGreen}{PASS}}\\
+\end{tabular}
+\caption{Target spec versus measured results --- 10/10 verified (ngspice exit 0).}
+\end{table}
+
+\section{Schematic}
+The schematic on the following page is not a hand-drawing --- it is rendered \emph{directly from the
+verified netlist} by a deterministic auto-layout, so it cannot drift from the circuit that was
+simulated. Every device, value and connection is exactly what ngspice solved.
+
+\textbf{How to read it.} The audio ground is node \texttt{0}; the supply rail is \texttt{vcc}. Each
+net is a horizontal rail and each device a rung between its nets. Trace the signal: \texttt{in}
+$\rightarrow$ \texttt{Rin} $\rightarrow$ \texttt{Cin} into \texttt{Q1}'s base; \texttt{Q1}'s
+collector drives \texttt{Ccp} into the diode clipper \texttt{(D1/D2)}; the recovered signal leaves
+\texttt{Q2}'s collector through \texttt{Cout} into the tone/volume network and out.
+
+\schematicpage{sunrise.pdf}{Complete schematic, auto-rendered from the verified netlist \texttt{sunrise.cir} (27 devices; net-rail layout).}
+
+\section{How it was verified}
+The trust root is a single command that runs the netlist through ngspice and checks the measured
+results against the spec. It returns one of three honest verdicts: \emph{verified} (converged and all
+assertions pass), \emph{converged} (solves, but some assertion is unmet), or \emph{failed}
+(non-convergent). Convergence itself is a free correctness gate --- a floating node or a circuit with
+no DC path to ground simply will not solve.
+
+\begin{callout}{green}{What ``verified'' guarantees here}
+ngspice converged, and all ten assertions in the specification passed against the measured
+\texttt{.measure}/\texttt{.control} results, in a single run. The numbers in this guide are that run's
+measurements.
+\end{callout}
+
+\section{Simulated results}
+All plots below are drawn from ngspice output of the verified circuit, at the spec's nominal
+conditions: 9\,V supply, a 1\,kHz input, drive at maximum, volume at maximum, tone nominal.
+
+\subsection{Transient response --- the drive}
+At a 50\,mV input the clean sine is amplified past the diode knee and the peaks are softly flattened
+into the rounded, symmetric clipped wave that is the overdrive. The clipping is gentle rather than
+gated --- the body of the waveform survives, which is what keeps the drive musical and touch-sensitive.
+\begin{figure}[h]\centering
+\includegraphics[width=0.82\linewidth]{plot-transient.pdf}
+\caption{Three cycles of steady-state output. The input is shown scaled $\times$40 for shape comparison; the output is the real, unscaled clipped waveform.}
+\end{figure}
+
+\subsection{Output spectrum}
+The harmonic content of the clipped wave is the drive's tonal signature: a fundamental at 1\,kHz
+surrounded by a soft harmonic comb dominated by odd harmonics, corresponding to a measured total
+harmonic distortion of \textbf{11.2\%}.
+\begin{figure}[h]\centering
+\includegraphics[width=0.82\linewidth]{plot-spectrum.pdf}
+\caption{Output spectrum (ngspice \texttt{spec}, the same DFT method the verified THD figure uses). THD = 11.2\%.}
+\end{figure}
+
+\subsection{Frequency response (Bode)}
+The small-signal response shows the $\approx$38.5\,dB midband gain, the low-frequency roll-off set by
+the coupling capacitors ($-3$\,dB corner at 38\,Hz, safely below the guitar's low E), and the gentle
+high-frequency roll-off of the passive tone network.
+\begin{figure}[h]\centering
+\includegraphics[width=0.82\linewidth]{plot-bode.pdf}
+\caption{Output Bode plot. Midband gain 38.5\,dB; low corner 38\,Hz.}
+\end{figure}
+
+\section{Bill of materials \& what each part does}
+Every device in the verified netlist, with its function and --- because this is a \emph{build} guide
+--- a note on what moving its value does. Sub-blocks are grouped.
+\begin{table}[h]
+\centering\small\sffamily
+\rowcolors{2}{white}{sfZebra}
+\begin{tabular}{@{}llp{8.0cm}@{}}
+\sfhead{Ref} & \sfheadcell{Value} & \sfheadcell{Function --- and the effect of changing it}\\
+\sfgrouprow{3}{Input \& first stage (Q1)}\\
+Rin   & 68\,k$\Omega$  & Series input resistor; sets input impedance. \emph{Larger} $\rightarrow$ higher Z, less pickup loading, slightly less drive.\\
+Cin   & 0.1\,$\mu$F    & Input coupling cap; with the input impedance sets the low corner (38\,Hz). \emph{Smaller} $\rightarrow$ tighter, thinner low end.\\
+Q1    & NPN (QNPN)     & First common-emitter gain stage; sets the drive into the clipper.\\
+Rc1   & 10\,k$\Omega$  & Q1 collector load; sets first-stage gain. \emph{Larger} $\rightarrow$ more gain, more drive.\\
+Ce1   & 47\,$\mu$F     & Emitter bypass; sets the AC gain. \emph{Smaller} $\rightarrow$ less gain, cleaner.\\
+\sfgrouprow{3}{Clipper}\\
+Ccp   & 0.22\,$\mu$F   & AC-couples into the clipper.\\
+Rcp   & 47\,k$\Omega$  & Clipper load; sets how hard the diodes are driven. \emph{Smaller} $\rightarrow$ more drive, more distortion.\\
+D1,\,D2 & Si (DSI)     & Symmetric silicon clipper. Lower-drop diodes (Ge/Schottky) $\rightarrow$ earlier, softer clip.\\
+\sfgrouprow{3}{Recovery (Q2) \& output}\\
+Q2    & NPN (QNPN)     & Recovery/output stage; restores level after the clipper.\\
+Rc2   & 10\,k$\Omega$  & Q2 collector load; sets output level.\\
+Cout  & 0.1\,$\mu$F    & Output coupling cap; keep $\geq$0.1\,$\mu$F or the low end thins under load.\\
+Rtone & 25\,k$\Omega$  & Tone pot (treble-cut). \emph{More cut} $\rightarrow$ darker.\\
+Ctone & 10\,nF         & Tone shunt cap; sets the treble-cut pivot.\\
+Rvol  & 100\,k$\Omega$ & Master volume (modelled at maximum).\\
+\end{tabular}
+\caption{Complete bill of materials with per-part design notes.}
+\end{table}
+
+\begin{callout}{blue}{Pick the diodes by ear}
+The clipper diodes dominate the character. \textbf{1N4148} silicon (modelled here) gives the classic
+mid-forward drive; swapping to germanium or Schottky lowers the forward drop for an earlier, softer,
+quieter clip, and an \emph{asymmetric} pair (one diode one way, two the other) adds even harmonics for
+a grittier, more vocal break-up. The spec endpoints hold for any of these within the modelled range.
+\end{callout}
+
+\section{Build notes \& caveats}
+These are the gaps between the verified \emph{model} and a physical \emph{build}. None affect the
+10/10 simulation result; they are what to do at the bench.
+\begin{itemize}
+  \item \textbf{Use a real volume taper.} The volume is modelled at maximum; use an audio-taper
+  100\,k$\Omega$ pot so the level sweep feels even.
+  \item \textbf{Match the clipper diodes.} For true symmetry, match \texttt{D1} and \texttt{D2} forward
+  drops; a few millivolts of mismatch is audible as a faint even-harmonic tint (often desirable).
+  \item \textbf{Decouple the supply.} Add a reservoir cap across the 9\,V rail at the board; the model
+  assumes a stiff supply.
+  \item \textbf{The tone is a treble-cut, not a mid-scoop.} Voice and label it as a tone/darkness knob.
+\end{itemize}
+
+\section{Appendix --- netlist \& measurement methods}
+\subsection{How the trickier numbers were measured}
+\begin{itemize}
+  \item \textbf{Distortion (thd\_max, thd\_clean)} --- two transient runs at 50\,mV and 5\,mV, each
+  linearised and passed through ngspice's harmonic analysis; the THD is computed from the harmonic
+  magnitudes and printed under two distinct names.
+  \item \textbf{Symmetry (clip\_asym)} --- the positive and negative peak excursions of the clipped
+  output are compared; the asymmetry is reported as a percentage of the full swing.
+  \item \textbf{Tone range (tone\_db)} --- the 1\,kHz gain is measured at both tone-pot extremes and the
+  difference is reported.
+  \item \textbf{Input impedance (zin)} --- the small-signal input current is measured under a 1\,V AC
+  drive and inverted.
+\end{itemize}
+
+\end{document}
