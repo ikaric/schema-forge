@@ -11,11 +11,16 @@ Resume and advance the design. Runs unattended; the user watches on
 here — make the most reasonable decision from the spec + repo precedent and
 record non-obvious choices in `findings/decision-*.md`.
 
-**You only ever write to `design/`** (netlists, markdown, artifacts). Never edit
-the `schema_forge` backend — the runner, parsers, and assertions are the trust
-root, and patching them could fake a pass. If the simulation tooling looks broken
-or limited, **halt and report it**; do not fix it yourself (see CLAUDE.md
-*Never modify the harness itself*).
+**You only ever write to `design/`** (netlists, markdown, artifacts) — never the
+`schema_forge` backend, the `frontend/`, the `Makefile`, or `.claude/`. The
+runner, parsers, and assertions are the trust root, and patching them could fake a
+pass. The live UI is a **pre-built SPA the server serves and re-renders from
+`design/` over a WebSocket**, so you drive it *entirely* by writing `design/`
+(every write streams a fresh frame to the browser) — you never need to touch the
+frontend or backend to update the view, and editing them risks breaking the very
+thing showing your progress. If the simulation tooling looks broken or limited,
+**halt and report it**; do not fix it yourself (see CLAUDE.md *Never modify the
+harness itself*).
 
 ## Pacing (self-looping — no `/loop` wrapper)
 
@@ -37,8 +42,8 @@ or limited, **halt and report it**; do not fix it yourself (see CLAUDE.md
 
 ## Step 1 — resume context
 
-- Ensure the UI is up (start `make dev` / uvicorn on :8000 in the background if
-  not), so the user sees this session live.
+- Ensure the UI is up (`make up` brings it up detached on :8000 if it isn't
+  already), so the user sees this session live.
 - Read `design/PROBLEM.md`, `design/spec.md`, `design/ROADMAP.md`,
   `design/LOG.md`, `design/research.md`, `design/feedback.md`,
   `design/findings/INDEX.md`, and `git log --oneline -n 15`. Summarise where
@@ -49,7 +54,13 @@ or limited, **halt and report it**; do not fix it yourself (see CLAUDE.md
 Pick the highest-value **open** sub-goal from `ROADMAP.md` (one whose assertion
 is not yet passing) — but **open notes in `design/feedback.md` come first** (a
 reviewer or the user flagged them; close each with `- [x] … · addressed` once the
-simulation confirms it, never by relaxing a spec). Then:
+simulation confirms it, never by relaxing a spec).
+
+**Narrate the loop live.** Append a one-line `design/LOG.md` entry as you *enter*
+each sub-step below (picked sub-goal, reference check, drafting, simulating,
+revision N with the measured-vs-target delta, review, promote). Every `design/`
+write streams instantly to the UI, so frequent honest LOG lines are what let the
+user track progress in realtime — not just the final promote. Then:
 
 1. **Reference check** — consult `design/research.md` first; if it doesn't cover
    the topology you need, dispatch **librarian** (known designs, datasheets, app

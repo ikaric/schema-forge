@@ -58,8 +58,9 @@ Work the **open** notes, highest-impact first. For each:
 5. **Review** — dispatch **critic** to confirm the note is genuinely addressed
    and nothing else regressed (`findings/review-*.md`).
 
-**Never relax a `design/spec.md` assertion to satisfy a note** — that is the
-electronics `sorry`. If a note genuinely conflicts with the spec, do not silently
+**Never relax a `design/spec.md` assertion to satisfy a note** — that fakes the
+result and voids the harness's guarantee. If a note genuinely conflicts with the
+spec, do not silently
 comply: write `findings/decision-<topic>-<date>.md` with the reasoning, leave the
 note as `· conflicts-with-spec`, and surface it to the user.
 
