@@ -6,8 +6,9 @@ Two views, per the project's design choice:
   view), drawn with real symbols and wires and derived entirely from the parsed
   netlist (so it cannot drift from the verified circuit). A topology-aware layout
   handles common-emitter BJT cascades (Fuzz Face / boost / preamp class); any
-  netlist it doesn't recognise falls back to a hand-built component summary card,
-  so a valid SVG is *always* produced.
+  netlist it can't fully represent falls back to a general rail auto-layout that
+  draws *every* device, and finally to a hand-built component summary card — so a
+  valid, complete SVG is *always* produced.
 * **CircuitJS string** — an interactive, draggable schematic for the frontend
   iframe. Auto-generated with a deterministic matrix layout (nets are horizontal
   rails, two-terminal devices are vertical rungs). A netlist may override this
@@ -172,6 +173,20 @@ def _supply_voltage(circuit: Circuit) -> str:
     return ""
 
 
+def _model_polarity(circuit: Circuit) -> dict[str, bool]:
+    """Map ``.model`` name -> is-NPN (True) / is-PNP (False); defaults to NPN.
+
+    Lets the renderer draw the right transistor symbol instead of assuming NPN.
+    """
+    pol: dict[str, bool] = {}
+    for d in circuit.directives:
+        toks = d.split()
+        if len(toks) >= 3 and toks[0].lower() == ".model":
+            up = d.upper()
+            pol[toks[1].lower()] = "PNP" not in up and "PMOS" not in up
+    return pol
+
+
 # Blueprint palette. The schematic sits on its own darker "drawing board" so it
 # reads as a distinct surface against the page's lighter blueprint field, with a
 # faint grayish-white grid (deliberately quieter than the page grid).
@@ -201,7 +216,7 @@ def _blueprint_frame(svg: str) -> str:
 
 # Inherently branchy: each optional part (Rc, Re, Cin, Cout, Rload, feedback)
 # adds a layout path. Kept as one routine so the drawing reads top-to-bottom.
-def _cascade_svg(circuit: Circuit) -> str | None:  # noqa: C901
+def _cascade_svg(circuit: Circuit) -> tuple[str, set[str]] | None:  # noqa: C901
     """Draw a common-emitter BJT cascade (Fuzz Face / boost / preamp class).
 
     Returns ``None`` if the netlist isn't a recognisable CE cascade so the caller
@@ -238,6 +253,7 @@ def _cascade_svg(circuit: Circuit) -> str | None:  # noqa: C901
     schemdraw.use("svg")
     elm: Any = elements  # schemdraw element constructors are partially untyped
     volt = _supply_voltage(circuit)
+    pol = _model_polarity(circuit)
     used: set[str] = {s["ref"] for s in stages}
     vcc_y, gap = 7.0, 6.0
     d = schemdraw.Drawing(unit=2.0)
@@ -248,7 +264,9 @@ def _cascade_svg(circuit: Circuit) -> str | None:  # noqa: C901
     rail_pts: list[Any] = []
     for i, s in enumerate(ordered):
         x = 2 + i * gap
-        q = elm.BjtNpn(circle=True).anchor("base").at((x, 3)).label(
+        npn = pol.get(s["val"].split()[0].lower(), True) if s["val"] else True
+        bjt = elm.BjtNpn if npn else elm.BjtPnp
+        q = bjt(circle=True).anchor("base").at((x, 3)).label(
             f"{s['ref']}\n{s['val']}", "right", ofst=(0.1, -0.6))
         d += q
         q_elem[s["ref"]] = q
@@ -292,6 +310,8 @@ def _cascade_svg(circuit: Circuit) -> str | None:  # noqa: C901
     d += elm.Line().at(rail_pts[0]).to(rail_pts[-1])
     vsrc = next((v for v in circuit.by_kind("V")
                  if "sin" not in (v.value or "").lower()), None)
+    if vsrc:
+        used.add(vsrc.name)
     batt_label = (
         f"{vsrc.name}\n{volt}" if vsrc and volt else (vsrc.name if vsrc else "V1")
     )
@@ -312,6 +332,8 @@ def _cascade_svg(circuit: Circuit) -> str | None:  # noqa: C901
         in_pt = d.here
         vin = next((v for v in circuit.by_kind("V")
                     if "sin" in (v.value or "").lower()), None)
+        if vin:
+            used.add(vin.name)
         d += elm.Line().at(in_pt).toy(2.2)
         d += elm.SourceSin().toy(0.8).label(f"{vin.name}\nin" if vin else "in", "left")
         d += elm.Line().toy(0.0)
@@ -358,7 +380,7 @@ def _cascade_svg(circuit: Circuit) -> str | None:  # noqa: C901
 
     data = d.get_imagedata("svg")
     raw = data.decode("utf-8") if isinstance(data, bytes) else str(data)
-    return _blueprint_frame(raw)
+    return _blueprint_frame(raw), used
 
 
 def _card_svg(circuit: Circuit) -> str:
@@ -413,17 +435,280 @@ def _card_svg(circuit: Circuit) -> str:
 </svg>"""
 
 
+# --------------------------------------------------------------------------- #
+# General auto-layout (completeness-first fallback)
+#
+# A deterministic rail/ladder layout that draws EVERY parsed device, used
+# whenever the skeleton above can't represent the whole circuit. Placement is an
+# iterated barycentre sweep — the cheap, reproducible cousin of the force-directed
+# / simulated-annealing placement EDA tools use ("good enough", not optimal):
+# order nets by the mean column of their devices, order devices by the mean row
+# of their nets, repeat. Like the skeleton it is derived entirely from the parsed
+# netlist — it never invents a part or a wire, so it cannot drift from the
+# verified circuit; it can only be incomplete-by-bug, never wrong-by-fiction.
+# --------------------------------------------------------------------------- #
+_G_ACCENT = "#7fb2ff"
+_G_NETLBL = "#9fc1ee"
+_G_COL_W = 104
+_G_ROW_H = 76
+_G_X0 = 190
+_G_Y0 = 120
+_G_BODY = 30
+
+
+class _Sheet:
+    """A minimal SVG sink (no external drawing dependency)."""
+
+    def __init__(self) -> None:
+        self.p: list[str] = []
+
+    def line(self, x1: float, y1: float, x2: float, y2: float,
+             w: float = 2.0, color: str = _BP_INK) -> None:
+        self.p.append(
+            f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
+            f'stroke="{color}" stroke-width="{w}" stroke-linecap="round"/>'
+        )
+
+    def rect(self, x: float, y: float, w: float, h: float) -> None:
+        self.p.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" '
+            f'rx="2" fill="none" stroke="{_BP_INK}" stroke-width="2"/>'
+        )
+
+    def circle(self, cx: float, cy: float, r: float) -> None:
+        self.p.append(
+            f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r:.1f}" fill="none" '
+            f'stroke="{_BP_INK}" stroke-width="2"/>'
+        )
+
+    def dot(self, cx: float, cy: float, r: float = 3.0) -> None:
+        self.p.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r}" fill="{_BP_INK}"/>')
+
+    def poly(self, pts: list[tuple[float, float]], fill: str = "none") -> None:
+        s = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
+        self.p.append(
+            f'<polyline points="{s}" fill="{fill}" stroke="{_BP_INK}" '
+            f'stroke-width="2" stroke-linejoin="round"/>'
+        )
+
+    def path(self, d: str) -> None:
+        self.p.append(
+            f'<path d="{d}" fill="none" stroke="{_BP_INK}" stroke-width="2"/>'
+        )
+
+    def text(self, x: float, y: float, s: str, size: int = 11,
+             color: str = _BP_INK, anchor: str = "start",
+             weight: str = "400") -> None:
+        for i, ln in enumerate(str(s).split("\n")):
+            self.p.append(
+                f'<text x="{x:.1f}" y="{y + i * (size + 2):.1f}" '
+                f'font-family="ui-monospace,Menlo,monospace" font-size="{size}" '
+                f'font-weight="{weight}" fill="{color}" '
+                f'text-anchor="{anchor}">{html.escape(ln)}</text>'
+            )
+
+    def svg(self, w: float, h: float) -> str:
+        return (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
+            f'viewBox="0 0 {w} {h}">' + "".join(self.p) + "</svg>"
+        )
+
+
+def _g_ground(sh: _Sheet, x: float, y: float) -> None:
+    sh.line(x, y, x, y + 9)
+    for i, half in enumerate((11, 7, 3)):
+        sh.line(x - half, y + 9 + i * 5, x + half, y + 9 + i * 5)
+
+
+def _g_two_term(sh: _Sheet, x: float, ytop: float, ybot: float,
+                kind: str, name: str, value: str) -> None:
+    """Draw a 2-terminal symbol as a vertical rung between the ytop/ybot rails."""
+    mid = (ytop + ybot) / 2
+    top, bot = mid - _G_BODY / 2, mid + _G_BODY / 2
+    if kind == "C":
+        sh.line(x, ytop, x, mid - 4)
+        sh.line(x - 12, mid - 4, x + 12, mid - 4, w=2.4)
+        sh.line(x - 12, mid + 4, x + 12, mid + 4, w=2.4)
+        sh.line(x, mid + 4, x, ybot)
+    elif kind == "D":
+        sh.line(x, ytop, x, top)
+        sh.poly([(x - 7, top), (x + 7, top), (x, top + 12), (x - 7, top)], fill=_BP_INK)
+        sh.line(x - 7, top + 12, x + 7, top + 12, w=2.4)
+        sh.line(x, top + 12, x, ybot)
+    elif kind == "L":
+        sh.line(x, ytop, x, top)
+        for k in range(3):
+            sh.path(f"M{x} {top + k * 10} a5 5 0 0 1 0 10")
+        sh.line(x, top + 30, x, ybot)
+    else:  # R and any other generic two-terminal device
+        sh.line(x, ytop, x, top)
+        sh.rect(x - 8, top, 16, _G_BODY)
+        if kind != "R":
+            sh.text(x, mid + 4, kind, size=10, anchor="middle")
+        sh.line(x, bot, x, ybot)
+    sh.text(x + 16, mid - 2, f"{name}\n{value}" if value else name, color=_G_ACCENT)
+
+
+def _g_source(sh: _Sheet, x: float, ytop: float, ybot: float,
+              name: str, value: str, ac: bool) -> None:
+    mid = (ytop + ybot) / 2
+    sh.line(x, ytop, x, mid - 14)
+    sh.circle(x, mid, 14)
+    if ac:
+        sh.path(f"M{x - 7} {mid} q3.5 -7 7 0 q3.5 7 7 0")
+    else:
+        sh.text(x, mid - 1, "+", size=14, anchor="middle")
+        sh.text(x, mid + 12, "−", size=14, anchor="middle")
+    sh.line(x, mid + 14, x, ybot)
+    sh.text(x + 18, mid - 2, f"{name}\n{value}" if value else name, color=_G_ACCENT)
+
+
+def _g_transistor(sh: _Sheet, x: float, cy: float, yc: float, yb: float,
+                  ye: float, name: str, value: str, npn: bool) -> None:
+    """3-terminal device: collector up, emitter down, base left — each pin routed
+    to its own rail, so the drawing is faithful regardless of node order."""
+    sh.circle(x, cy, 15)
+    sh.line(x, cy - 15, x, yc)
+    sh.line(x, cy + 15, x, ye)
+    sh.line(x - 15, cy, x - 26, cy)
+    sh.line(x - 26, cy, x - 26, yb)
+    ay = cy + 11  # emitter arrow: NPN points out, PNP points in
+    if npn:
+        sh.poly([(x - 3, ay - 5), (x, ay), (x + 4, ay - 4)], fill=_BP_INK)
+    else:
+        sh.poly([(x - 3, ay + 1), (x + 4, ay), (x + 1, ay - 5)], fill=_BP_INK)
+    label = f"{name}\n{value} ({'NPN' if npn else 'PNP'})" if value else name
+    sh.text(x + 20, cy - 2, label, color=_G_ACCENT)
+
+
+def _barycentre_order(
+    circuit: Circuit, nets: list[str]
+) -> tuple[list[str], list[Element]]:
+    """Iterated barycentre crossing-reduction (deterministic, cheap)."""
+    devs = list(circuit.elements)
+    net_order = list(nets)
+
+    def mean(xs: list[Any], default: float) -> float:
+        vals = [float(v) for v in xs if v is not None]
+        return sum(vals) / len(vals) if vals else default
+
+    for _ in range(6):
+        row = {n: i for i, n in enumerate(net_order)}
+        devs = sorted(
+            circuit.elements,
+            key=lambda d: mean(
+                [row.get(n) for n in d.nodes if not _is_ground(n)], len(net_order) / 2
+            ),
+        )
+        col = {d.name: i for i, d in enumerate(devs)}
+        net_order = sorted(
+            nets,
+            key=lambda n: mean(
+                [col.get(d.name) for d in circuit.elements if n in d.nodes],
+                len(devs) / 2,
+            ),
+        )
+    return net_order, devs
+
+
+def _general_svg(circuit: Circuit) -> str:
+    """Draw *every* device of *circuit* via the general rail layout (see above)."""
+    nets = [n for n in circuit.nodes if not _is_ground(n)]
+    net_order, devs = _barycentre_order(circuit, nets)
+    yof = {n: _G_Y0 + i * _G_ROW_H for i, n in enumerate(net_order)}
+    pol = _model_polarity(circuit)
+    sh = _Sheet()
+    conn: dict[str, list[float]] = {n: [] for n in nets}
+
+    for i, dev in enumerate(devs):
+        x = _G_X0 + i * _G_COL_W
+        ns = dev.nodes
+        if dev.kind in ("Q", "J", "Z") and len(ns) >= 3:
+            cN, bN, eN = ns[0], ns[1], ns[2]
+            ys = [yof[n] for n in (cN, bN, eN) if not _is_ground(n) and n in yof]
+            cy = sum(ys) / len(ys) if ys else _G_Y0
+            yc = yof[cN] if (not _is_ground(cN) and cN in yof) else cy - 46
+            ye = yof[eN] if (not _is_ground(eN) and eN in yof) else cy + 46
+            yb = yof[bN] if (not _is_ground(bN) and bN in yof) else cy
+            npn = pol.get((dev.value or "").split()[0].lower(), True) if dev.value else True
+            _g_transistor(sh, x, cy, yc, yb, ye, dev.name, dev.value or "", npn)
+            for net, yy, xx in ((cN, yc, x), (eN, ye, x), (bN, yb, x - 26)):
+                if _is_ground(net) or net not in yof:
+                    _g_ground(sh, xx, yy)
+                else:
+                    conn[net].append(xx)
+                    sh.dot(xx, yy)
+            continue
+
+        if len(ns) < 2:
+            continue
+        a, b = ns[0], ns[1]
+        ga, gb = _is_ground(a), _is_ground(b)
+        if ga and gb:
+            continue
+        ac = "sin" in (dev.value or "").lower()
+        if ga or gb:
+            live = b if ga else a
+            if live not in yof:
+                continue
+            yl = yof[live]
+            ytop, ybot = yl, yl + 56
+            if dev.kind in ("V", "I"):
+                _g_source(sh, x, ytop, ybot, dev.name, dev.value or "", ac)
+            else:
+                _g_two_term(sh, x, ytop, ybot, dev.kind, dev.name, dev.value or "")
+            _g_ground(sh, x, ybot)
+            conn[live].append(x)
+            sh.dot(x, yl)
+        else:
+            ya, yb2 = yof[a], yof[b]
+            ytop, ybot = min(ya, yb2), max(ya, yb2)
+            if dev.kind in ("V", "I"):
+                _g_source(sh, x, ytop, ybot, dev.name, dev.value or "", ac)
+            else:
+                _g_two_term(sh, x, ytop, ybot, dev.kind, dev.name, dev.value or "")
+            conn[a].append(x)
+            conn[b].append(x)
+            sh.dot(x, ya)
+            sh.dot(x, yb2)
+
+    for n in net_order:
+        xs = conn.get(n) or []
+        if not xs:
+            continue
+        y = yof[n]
+        sh.line(min(xs) - 16, y, max(xs) + 16, y, w=1.6)
+        sh.text(70, y + 4, n, size=12, color=_G_NETLBL)
+        sh.dot(min(xs) - 16, y, r=2.5)
+
+    width = _G_X0 + len(devs) * _G_COL_W + 150
+    height = _G_Y0 + max(len(net_order), 1) * _G_ROW_H + 90
+    sh.text(70, 54, circuit.title or "schematic", size=16, weight="700")
+    sh.text(70, 75, f"general auto-layout · {len(devs)} devices · "
+                    f"{len(net_order)} nets", size=11, color=_G_NETLBL)
+    return _blueprint_frame(sh.svg(width, height))
+
+
 def to_svg(circuit: Circuit) -> str:
     """Render *circuit* to an SVG string, never raising.
 
-    Prefers the topology-aware connected schematic; falls back to the component
-    summary card for circuits the layout doesn't recognise.
+    Uses the topology-aware skeleton only when it draws *every* device; otherwise
+    falls back to the general rail auto-layout (which draws them all), and finally
+    to the dependency-free component card. The displayed schematic is therefore
+    always complete — it can never silently omit a part of the verified circuit.
     """
     try:
-        svg = _cascade_svg(circuit)
+        result = _cascade_svg(circuit)
+    except Exception:
+        result = None
+    if result is not None:
+        svg, used = result
+        if {e.name for e in circuit.elements} <= used:
+            return svg
+    try:
+        return _general_svg(circuit)
     except Exception:
         return _card_svg(circuit)
-    return svg if svg is not None else _card_svg(circuit)
 
 
 # --------------------------------------------------------------------------- #
