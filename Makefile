@@ -61,9 +61,9 @@ up:
 
 down:
 	@pid=$$(cat .claude/local/server.pid 2>/dev/null); \
-	[ -n "$$pid" ] && kill $$pid 2>/dev/null || true; \
+	[ -n "$$pid" ] && kill -9 $$pid 2>/dev/null || true; \
 	portpid=$$(lsof -ti tcp:$(PORT) 2>/dev/null); \
-	[ -n "$$portpid" ] && kill $$portpid 2>/dev/null || true; \
+	[ -n "$$portpid" ] && kill -9 $$portpid 2>/dev/null || true; \
 	rm -f .claude/local/server.pid; \
 	echo "schema-forge stopped (was pid $${pid:-none})"
 
