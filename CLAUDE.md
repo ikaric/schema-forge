@@ -93,16 +93,15 @@ appearance of progress.
 ## The workflow (one clone, end to end)
 
 ```
-/target                  bootstrap the problem + machine-checkable spec      (once)
-  → /research            survey prior art → design/research.md               (recommended)
+/target                  bootstrap problem + spec, bring up the UI, survey prior art  (once)
   → /solve               the autonomous verify cycle below; halts at N/N verified
   → /feedback <notes.md> ingest review notes → another focused /solve pass   (iterate)
   → /polish              datasheet-style design-report.md
 ```
 
-`/target` and `/research` only **set up** (never design or simulate); `/solve`
-and `/feedback` run the verify cycle below; `/vector` adjusts strategy between
-runs.
+`/target` only **sets up** (problem, spec, and the prior-art survey — never design
+or simulate); `/solve` and `/feedback` run the verify cycle below; `/vector`
+adjusts strategy between runs.
 
 ## The verify cycle (the named pattern)
 
@@ -149,15 +148,15 @@ flows through markdown the frontend ingests:
   `` - `<iso-ts>` **<source>** — <message> ``
 - `design/findings/*.md` — the shared inter-agent notebook (see
   `findings/INDEX.md` for naming). Agents write here and report back.
-- `design/research.md` — the curated prior-art survey (`/research` writes it;
+- `design/research.md` — the curated prior-art survey (`/target` writes it;
   the Research panel renders it as markdown).
 - `design/feedback.md` — review/user notes as a checklist (`/feedback` appends;
   the Feedback panel renders it). One note per line:
   `` - [ ] **<from>** — <note> · <status> `` (`[x]` = addressed).
 - `design/design-report.md` — the canonical human-readable deliverable.
 
-Only the skills (`/target`, `/research`, `/solve`, `/feedback`, `/vector`,
-`/polish`) edit `ROADMAP.md`, commit, or push. Agents write to `findings/` and
+Only the skills (`/target`, `/solve`, `/feedback`, `/vector`, `/polish`) edit
+`ROADMAP.md`, commit, or push. Agents write to `findings/` and
 report back; they never commit.
 
 ## Anti-defeatism / anti-overreach

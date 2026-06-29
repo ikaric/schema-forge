@@ -9,8 +9,8 @@ gathers it here in one place:
 - **Datasheets & application notes** — device models and reference circuits.
 - **Reference sources** — community analyses and prior designs, cited.
 
-Run \`/research\` after \`/target\`: the *librarian* writes the survey into
-\`design/research.md\`, and it renders here — scrollable, so it's all in one place.`;
+\`/target\` runs the *librarian* survey and writes it to \`design/research.md\`; it
+renders here — scrollable, so it's all in one place.`;
 
 export function Research({ research }: { research: string }) {
   const live = research.trim().length > 0;
