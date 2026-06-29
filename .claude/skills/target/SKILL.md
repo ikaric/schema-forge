@@ -58,13 +58,20 @@ form, so **Read each before overwriting it** (the editor requires a read first);
 - **`design/feedback.md`** — a `# Feedback` heading only; notes arrive via `/feedback`.
 - Append a `/target` entry to **`design/LOG.md`**.
 
-## 3. Activate
+## 3. Activate + bring up the live UI
 
 - Remove the template marker: `rm design/.schemaforge-template`.
 - Refresh the rollup: `uv run schema-forge state > /dev/null` (writes `design/state.json`).
-- Ensure the UI is up so the user can watch: if nothing is serving :8000, start
-  it in the background — `make dev` (or `uv run uvicorn schema_forge.api.asgi:app
-  --port 8000`). Tell the user to open **http://127.0.0.1:8000**.
+- **Set up and serve in one shot — the user should never need a second terminal
+  for `make dev`.** Run `make setup` (installs backend + frontend deps; safe to
+  re-run), then **`make up`** — it builds the SPA and serves it + the live
+  WebSocket on :8000 **detached in the background** (idempotent; a no-op if a
+  server is already on :8000, and it survives this session). Poll
+  `http://127.0.0.1:8000/api/health` until it returns `ok` (a few seconds; tail
+  `.claude/local/server.log` if it doesn't come up), then tell the user it is
+  **live at http://127.0.0.1:8000** — research, the design loop, and plots all
+  update there in realtime. `make down` stops it. (Clones share :8000, so if it's
+  occupied by another clone, `make down` there first or run `PORT=<n> make up`.)
 
 **Bootstrap only — do NOT design, draft a netlist, or simulate here.** `/target`
 scaffolds the problem and then stops. Drafting netlists, running ngspice, and

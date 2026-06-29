@@ -5,7 +5,7 @@ PORT ?= 8000
 HOST ?= 127.0.0.1
 NETLIST ?= design/netlists/main.cir
 
-.PHONY: help init setup build serve dev frontend-dev sim test lint format typecheck check clean
+.PHONY: help init setup build serve dev up down frontend-dev sim test lint format typecheck check clean
 
 help:
 	@echo "Setup:"
@@ -13,8 +13,10 @@ help:
 	@echo "  setup         Install backend (uv) and frontend (npm) dependencies"
 	@echo ""
 	@echo "Run (always-on UI on http://$(HOST):$(PORT)):"
-	@echo "  dev           Build the SPA and serve it + API + live WebSocket (reload)"
-	@echo "  serve         Serve the already-built SPA + API (no reload)"
+	@echo "  up            Build + serve detached in the background (live UI; survives the shell)"
+	@echo "  down          Stop the background server started by 'make up'"
+	@echo "  dev           Build the SPA and serve it + API + live WebSocket (foreground, reload)"
+	@echo "  serve         Serve the already-built SPA + API (foreground, no reload)"
 	@echo "  build         Build the React SPA into the backend static dir"
 	@echo "  frontend-dev  Vite dev server on :5173 (proxies to the backend) for UI hacking"
 	@echo ""
@@ -41,6 +43,23 @@ serve:
 
 dev: build
 	$(UV) run uvicorn schema_forge.api.asgi:app --host $(HOST) --port $(PORT) --reload
+
+# Detached "always-on" UI: build once, then serve in the background so the live
+# dashboard stays up without holding a terminal open. Idempotent — a no-op if it
+# is already serving. No --reload: the in-app watcher streams design/ over the WS.
+up:
+	@if curl -fsS http://$(HOST):$(PORT)/api/health >/dev/null 2>&1; then \
+	  echo "schema-forge already live at http://$(HOST):$(PORT)"; \
+	else \
+	  $(MAKE) build; \
+	  mkdir -p .claude/local; \
+	  nohup $(UV) run uvicorn schema_forge.api.asgi:app --host $(HOST) --port $(PORT) \
+	    >> .claude/local/server.log 2>&1 < /dev/null & \
+	  echo "schema-forge serving (detached) at http://$(HOST):$(PORT) — logs: .claude/local/server.log"; \
+	fi
+
+down:
+	@pkill -f "uvicorn schema_forge.api.asgi" >/dev/null 2>&1 && echo "schema-forge stopped" || echo "schema-forge not running"
 
 frontend-dev:
 	cd frontend && npm run dev
