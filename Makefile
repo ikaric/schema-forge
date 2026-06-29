@@ -5,7 +5,7 @@ PORT ?= 8000
 HOST ?= 127.0.0.1
 NETLIST ?= design/netlists/main.cir
 
-.PHONY: help init setup build serve dev up down frontend-dev sim test lint format typecheck check clean
+.PHONY: help init setup build serve dev up down open frontend-dev sim test lint format typecheck check clean
 
 help:
 	@echo "Setup:"
@@ -15,6 +15,7 @@ help:
 	@echo "Run (always-on UI on http://$(HOST):$(PORT)):"
 	@echo "  up            Build + serve detached in the background (live UI; survives the shell)"
 	@echo "  down          Stop the background server started by 'make up'"
+	@echo "  open          Open the live dashboard in your browser"
 	@echo "  dev           Build the SPA and serve it + API + live WebSocket (foreground, reload)"
 	@echo "  serve         Serve the already-built SPA + API (foreground, no reload)"
 	@echo "  build         Build the React SPA into the backend static dir"
@@ -66,6 +67,12 @@ down:
 	[ -n "$$portpid" ] && kill -9 $$portpid 2>/dev/null || true; \
 	rm -f .claude/local/server.pid; \
 	echo "schema-forge stopped (was pid $${pid:-none})"
+
+# Open the live dashboard in the default browser (best-effort, cross-platform).
+open:
+	@xdg-open http://$(HOST):$(PORT) >/dev/null 2>&1 \
+	  || open http://$(HOST):$(PORT) >/dev/null 2>&1 \
+	  || echo "open http://$(HOST):$(PORT) in your browser"
 
 frontend-dev:
 	cd frontend && npm run dev

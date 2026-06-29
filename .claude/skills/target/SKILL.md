@@ -68,10 +68,11 @@ form, so **Read each before overwriting it** (the editor requires a read first);
   WebSocket on :8000 **detached in the background** (idempotent; a no-op if a
   server is already on :8000, and it survives this session). Poll
   `http://127.0.0.1:8000/api/health` until it returns `ok` (a few seconds; tail
-  `.claude/local/server.log` if it doesn't come up), then tell the user it is
-  **live at http://127.0.0.1:8000** — research, the design loop, and plots all
-  update there in realtime. `make down` stops it. (Clones share :8000, so if it's
-  occupied by another clone, `make down` there first or run `PORT=<n> make up`.)
+  `.claude/local/server.log` if it doesn't come up). Then run **`make open`** to
+  launch the dashboard in the browser, and tell the user it is **live at
+  http://127.0.0.1:8000** — research, the design loop, and plots all update there
+  in realtime. `make down` stops it. (Clones share :8000, so if it's occupied by
+  another clone, `make down` there first or run `PORT=<n> make up`.)
 
 ## 4. Survey the prior art (auto — populates the Research panel)
 
