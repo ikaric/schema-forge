@@ -121,40 +121,46 @@ def ac_figure(plot: Plot) -> Figure:
     )
 
 
-def fft_figure(plot: Plot, max_freq: float = 22000.0) -> Figure | None:
+def fft_figure(plot: Plot, max_freq: float = 8000.0) -> Figure | None:
+    """Output spectrum as a bar chart (spectrum-analyzer style), harmonic band."""
     t = np.real(plot.x)
     names = _signal_vars(plot)
     if len(t) < 8 or not names:
         return None
     out = next((n for n in names if "out" in n.lower()), names[-1])
     y = np.real(plot.data[out])
-    # Resample onto a uniform grid (ngspice transient steps are non-uniform).
-    n = len(t)
-    t_uniform = np.linspace(float(t[0]), float(t[-1]), n)
-    y_uniform = np.interp(t_uniform, t, y)
-    dt = (t_uniform[-1] - t_uniform[0]) / max(n - 1, 1)
+    # FFT the steady-state tail (skip the turn-on) for clean peaks, on a uniform
+    # grid (ngspice transient steps are non-uniform).
+    t0, t1 = float(t[0]), float(t[-1])
+    n = max(len(t), 16)
+    t_u = np.linspace(t0 + 0.25 * (t1 - t0), t1, n)
+    y_u = np.interp(t_u, t, y)
+    dt = (t_u[-1] - t_u[0]) / max(n - 1, 1)
     if dt <= 0:
         return None
-    spectrum = np.abs(np.fft.rfft(y_uniform * np.hanning(n))) / n * 2.0
+    mag = np.abs(np.fft.rfft((y_u - y_u.mean()) * np.hanning(n))) / n * 2.0
     freqs = np.fft.rfftfreq(n, d=dt)
     keep = freqs <= max_freq
-    mag_db = 20.0 * np.log10(spectrum[keep] + 1e-12)
-    fx, fy = _downsample(freqs[keep], mag_db)
     return _figure(
         "fft",
         f"Output spectrum — {out}",
         [
             {
-                "x": fx.tolist(),
-                "y": fy.tolist(),
-                "type": "scatter",
-                "mode": "lines",
+                "x": freqs[keep].tolist(),
+                "y": mag[keep].tolist(),
+                "type": "bar",
                 "name": "spectrum",
+                "marker": {"line": {"width": 0}},
             }
         ],
         {
-            "xaxis": {"title": {"text": "Frequency (Hz)"}},
-            "yaxis": {"title": {"text": "Magnitude (dB)"}},
+            "xaxis": {
+                "title": {"text": "Frequency (Hz)"},
+                "dtick": 500,
+                "range": [0, max_freq],
+            },
+            "yaxis": {"title": {"text": "Magnitude (V)"}},
+            "bargap": 0.06,
         },
     )
 

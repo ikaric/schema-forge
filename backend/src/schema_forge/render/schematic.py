@@ -2,10 +2,12 @@
 
 Two views, per the project's design choice:
 
-* **SchemDraw SVG** — a clean static diagram (the deliverable view). We place
-  real schematic symbols on a grid with net labels; if SchemDraw is unavailable
-  or the layout raises, we fall back to a hand-built SVG "summary card" so a
-  valid SVG is *always* produced.
+* **SchemDraw SVG** — a clean, *connected* static schematic (the deliverable
+  view), drawn with real symbols and wires and derived entirely from the parsed
+  netlist (so it cannot drift from the verified circuit). A topology-aware layout
+  handles common-emitter BJT cascades (Fuzz Face / boost / preamp class); any
+  netlist it doesn't recognise falls back to a hand-built component summary card,
+  so a valid SVG is *always* produced.
 * **CircuitJS string** — an interactive, draggable schematic for the frontend
   iframe. Auto-generated with a deterministic matrix layout (nets are horizontal
   rails, two-terminal devices are vertical rungs). A netlist may override this
@@ -19,11 +21,17 @@ import html
 import re
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
-from schema_forge.netlist import Circuit, parse_netlist
+from schema_forge.netlist import Circuit, Element, parse_netlist
 from schema_forge.units import parse_si
 
 _GROUND_NETS = {"0", "gnd", "gnd!", "vss", "agnd"}
+
+
+def _is_ground(node: str) -> bool:
+    return node.lower() in _GROUND_NETS
+
 
 _EMBED_RE = re.compile(
     r"^\*\s*@circuitjs-begin\s*$(.*?)^\*\s*@circuitjs-end\s*$",
@@ -117,35 +125,240 @@ def to_circuitjs(circuit: Circuit, embedded: str | None = None) -> str:
 # --------------------------------------------------------------------------- #
 # SVG
 # --------------------------------------------------------------------------- #
-def _schemdraw_svg(circuit: Circuit) -> str:
+def _find_supply(circuit: Circuit) -> str | None:
+    """The positive DC rail: a non-signal V-source's non-ground node."""
+    for v in circuit.by_kind("V"):
+        if len(v.nodes) < 2:
+            continue
+        a, b = v.nodes[0], v.nodes[1]
+        val = (v.value or "").lower()
+        if any(w in val for w in ("sin", "pulse", "pwl")):
+            continue  # a signal source, not the rail
+        if _is_ground(b) and not _is_ground(a):
+            return a
+        if _is_ground(a) and not _is_ground(b):
+            return b
+    return None
+
+
+def _r_between(circuit: Circuit, n1: str, n2: str) -> Element | None:
+    want = {n1.lower(), n2.lower()}
+    for r in circuit.by_kind("R"):
+        if len(r.nodes) >= 2 and {r.nodes[0].lower(), r.nodes[1].lower()} == want:
+            return r
+    return None
+
+
+def _cap_on(circuit: Circuit, node: str, used: set[str]) -> tuple[Element | None, str]:
+    for cap in circuit.by_kind("C"):
+        if cap.name in used or len(cap.nodes) < 2:
+            continue
+        lo = [n.lower() for n in cap.nodes]
+        if node.lower() in lo:
+            other = cap.nodes[1] if lo[0] == node.lower() else cap.nodes[0]
+            return cap, other
+    return None, ""
+
+
+def _supply_voltage(circuit: Circuit) -> str:
+    """DC rail magnitude as a label (e.g. '9 V'), parsed from the supply source."""
+    for v in circuit.by_kind("V"):
+        val = v.value or ""
+        if any(w in val.lower() for w in ("sin", "pulse", "pwl")):
+            continue
+        m = re.search(r"(?:dc\s*)?(-?\d+(?:\.\d+)?)", val, re.IGNORECASE)
+        if m:
+            return f"{m.group(1)} V"
+    return ""
+
+
+# Blueprint palette. The schematic sits on its own darker "drawing board" so it
+# reads as a distinct surface against the page's lighter blueprint field, with a
+# faint grayish-white grid (deliberately quieter than the page grid).
+_BP_FIELD = "#091d31"
+_BP_INK = "#dceafa"
+_BP_GRID = "#d4e2f0"
+
+
+def _blueprint_frame(svg: str) -> str:
+    """Lay a white-ink SchemDraw SVG onto a blueprint field with a fine grid."""
+    m = re.search(r'viewBox="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"', svg)
+    minx, miny, w, h = m.groups() if m else ("0", "0", "1000", "600")
+    overlay = (
+        "<defs>"
+        '<pattern id="bpg" width="22" height="22" patternUnits="userSpaceOnUse">'
+        f'<path d="M22 0H0V22" fill="none" stroke="{_BP_GRID}" '
+        'stroke-opacity="0.045" stroke-width="1"/></pattern>'
+        '<pattern id="bpG" width="110" height="110" patternUnits="userSpaceOnUse">'
+        f'<path d="M110 0H0V110" fill="none" stroke="{_BP_GRID}" '
+        'stroke-opacity="0.085" stroke-width="1"/></pattern></defs>'
+        f'<rect x="{minx}" y="{miny}" width="{w}" height="{h}" fill="{_BP_FIELD}"/>'
+        f'<rect x="{minx}" y="{miny}" width="{w}" height="{h}" fill="url(#bpg)"/>'
+        f'<rect x="{minx}" y="{miny}" width="{w}" height="{h}" fill="url(#bpG)"/>'
+    )
+    return re.sub(r"(<svg\b[^>]*>)", lambda mm: mm.group(1) + overlay, svg, count=1)
+
+
+# Inherently branchy: each optional part (Rc, Re, Cin, Cout, Rload, feedback)
+# adds a layout path. Kept as one routine so the drawing reads top-to-bottom.
+def _cascade_svg(circuit: Circuit) -> str | None:  # noqa: C901
+    """Draw a common-emitter BJT cascade (Fuzz Face / boost / preamp class).
+
+    Returns ``None`` if the netlist isn't a recognisable CE cascade so the caller
+    can fall back. The whole drawing is derived from the parsed netlist — symbols,
+    values, and wiring all come from the verified circuit, never invented.
+    """
+    supply = _find_supply(circuit)
+    bjts = circuit.by_kind("Q")
+    if supply is None or not bjts:
+        return None
+    stages = []
+    for q in bjts:
+        if len(q.nodes) < 3:
+            return None
+        stages.append({"ref": q.name, "val": q.value or "",
+                       "c": q.nodes[0], "b": q.nodes[1], "e": q.nodes[2]})
+    collectors = {s["c"].lower() for s in stages}
+    by_base = {s["b"].lower(): s for s in stages}
+    firsts = [s for s in stages if s["b"].lower() not in collectors]
+    if len(firsts) != 1:
+        return None
+    ordered = [firsts[0]]
+    while True:
+        nxt = by_base.get(ordered[-1]["c"].lower())
+        if not nxt or nxt in ordered:
+            break
+        ordered.append(nxt)
+    if len(ordered) != len(stages):
+        return None  # not a simple chain
+
     import schemdraw
-    from schemdraw import elements as elm
+    from schemdraw import elements
 
     schemdraw.use("svg")
-    symbols = {
-        "R": elm.Resistor,
-        "C": elm.Capacitor,
-        "L": elm.Inductor,
-        "D": elm.Diode,
-        "V": elm.SourceV,
-        "I": elm.SourceI,
-    }
-    per_row = 4
-    d = schemdraw.Drawing()
-    d.config(fontsize=11)
-    for i, el in enumerate(circuit.elements):
-        row, col = divmod(i, per_row)
-        x, y = col * 4.5, -row * 3.0
-        sym_cls = symbols.get(el.kind, elm.RBox)
-        elem = sym_cls().right().at((x, y))
-        label = el.name if not el.value else f"{el.name}\n{el.value}"
-        elem.label(label, loc="top", fontsize=10)
-        if len(el.nodes) >= 2:
-            elem.label(el.nodes[0], loc="left", fontsize=8, color="#2563eb")
-            elem.label(el.nodes[-1], loc="right", fontsize=8, color="#2563eb")
-        d.add(elem)
+    elm: Any = elements  # schemdraw element constructors are partially untyped
+    volt = _supply_voltage(circuit)
+    used: set[str] = {s["ref"] for s in stages}
+    vcc_y, gap = 7.0, 6.0
+    d = schemdraw.Drawing(unit=2.0)
+    d.config(fontsize=11, lw=1.6, color=_BP_INK)
+
+    q_elem: dict[str, Any] = {}
+    base_pt: dict[str, Any] = {}
+    rail_pts: list[Any] = []
+    for i, s in enumerate(ordered):
+        x = 2 + i * gap
+        q = elm.BjtNpn(circle=True).anchor("base").at((x, 3)).label(
+            f"{s['ref']}\n{s['val']}", "right", ofst=(0.1, -0.6))
+        d += q
+        q_elem[s["ref"]] = q
+        base_pt[s["b"].lower()] = q.base
+        rc = _r_between(circuit, s["c"], supply)
+        if rc:
+            used.add(rc.name)
+            d += elm.Resistor().at(q.collector).toy(vcc_y).label(
+                f"{rc.name}\n{rc.value}"
+            )
+        else:
+            d += elm.Line().at(q.collector).toy(vcc_y)
+        rail_pts.append(d.here)
+        if _is_ground(s["e"]):
+            d += elm.Line().at(q.emitter).toy(0.0)
+            d += elm.Ground()
+        else:
+            re_ = _r_between(circuit, s["e"], "0") or _r_between(circuit, s["e"], "gnd")
+            if re_:
+                used.add(re_.name)
+                d += elm.Resistor().at(q.emitter).toy(0.6).label(
+                    f"{re_.name}\n{re_.value}"
+                )
+                d += elm.Line().toy(0.0)
+                d += elm.Ground()
+
+    # inter-stage wiring: collector[i] -> base[i+1]
+    for i in range(len(ordered) - 1):
+        d += elm.Wire("-|").at(q_elem[ordered[i]["ref"]].collector).to(
+            q_elem[ordered[i + 1]["ref"]].base)
+
+    # Vcc rail across the collector resistor tops + battery on the far left
+    rail_label = (
+        f"+{volt}" if volt
+        else ("+V" if supply.lower() in {"vcc", "vdd", "v+"} else f"+{supply}")
+    )
+    d += elm.Line().at(rail_pts[0]).tox(-4.0).label(rail_label, "left")
+    rail_left = d.here
+    for p in rail_pts:
+        d += elm.Dot().at(p)
+    d += elm.Line().at(rail_pts[0]).to(rail_pts[-1])
+    vsrc = next((v for v in circuit.by_kind("V")
+                 if "sin" not in (v.value or "").lower()), None)
+    batt_label = (
+        f"{vsrc.name}\n{volt}" if vsrc and volt else (vsrc.name if vsrc else "V1")
+    )
+    d += elm.Line().at(rail_left).toy(4.4)
+    d += elm.SourceV().toy(1.4).label(batt_label, "left").reverse()
+    d += elm.Line().toy(0.0)
+    d += elm.Ground()
+
+    # input: signal source -> Cin -> first base
+    first_b = ordered[0]["b"]
+    cin, _src = _cap_on(circuit, first_b, used)
+    if cin:
+        used.add(cin.name)
+        d += elm.Line().at(base_pt[first_b.lower()]).tox(
+            base_pt[first_b.lower()][0] - 1.4
+        )
+        d += elm.Capacitor().left().label(f"{cin.name}\n{cin.value}")
+        in_pt = d.here
+        vin = next((v for v in circuit.by_kind("V")
+                    if "sin" in (v.value or "").lower()), None)
+        d += elm.Line().at(in_pt).toy(2.2)
+        d += elm.SourceSin().toy(0.8).label(f"{vin.name}\nin" if vin else "in", "left")
+        d += elm.Line().toy(0.0)
+        d += elm.Ground()
+
+    # output: last collector -> Cout -> load -> ground
+    last_c = ordered[-1]["c"]
+    cout, vol = _cap_on(circuit, last_c, used)
+    if cout:
+        used.add(cout.name)
+        tip = q_elem[ordered[-1]["ref"]].collector
+        d += elm.Line().at(tip).tox(tip[0] + 1.4)
+        d += elm.Capacitor().right().label(f"{cout.name}\n{cout.value}")
+        d += elm.Dot()
+        out_pt = d.here
+        rload = _r_between(circuit, vol, "0") or _r_between(circuit, vol, "gnd")
+        if rload:
+            used.add(rload.name)
+            d += elm.Resistor().at(out_pt).toy(0).label(f"{rload.name}\n{rload.value}")
+            d += elm.Ground()
+
+    # feedback: a leftover resistor from a later emitter back to an earlier base
+    for r in circuit.by_kind("R"):
+        if r.name in used or len(r.nodes) < 2:
+            continue
+        n1, n2 = r.nodes[0], r.nodes[1]
+        if n2.lower() in base_pt and not _is_ground(n1):
+            tgt, src = n2, n1
+        elif n1.lower() in base_pt and not _is_ground(n2):
+            tgt, src = n1, n2
+        else:
+            continue
+        used.add(r.name)
+        src_q = next(
+            (q_elem[s["ref"]] for s in ordered if s["e"].lower() == src.lower()),
+            None,
+        )
+        start = src_q.emitter if src_q else base_pt[tgt.lower()]
+        d += elm.Line().at(start).toy(-1.2)
+        d += elm.Resistor().tox(base_pt[tgt.lower()][0] - 1.0).label(
+            f"{r.name} {r.value}"
+        )
+        d += elm.Wire("|-").to(base_pt[tgt.lower()])
+
     data = d.get_imagedata("svg")
-    return data.decode("utf-8") if isinstance(data, bytes) else str(data)
+    raw = data.decode("utf-8") if isinstance(data, bytes) else str(data)
+    return _blueprint_frame(raw)
 
 
 def _card_svg(circuit: Circuit) -> str:
@@ -201,11 +414,16 @@ def _card_svg(circuit: Circuit) -> str:
 
 
 def to_svg(circuit: Circuit) -> str:
-    """Render *circuit* to an SVG string, never raising."""
+    """Render *circuit* to an SVG string, never raising.
+
+    Prefers the topology-aware connected schematic; falls back to the component
+    summary card for circuits the layout doesn't recognise.
+    """
     try:
-        return _schemdraw_svg(circuit)
+        svg = _cascade_svg(circuit)
     except Exception:
         return _card_svg(circuit)
+    return svg if svg is not None else _card_svg(circuit)
 
 
 # --------------------------------------------------------------------------- #
