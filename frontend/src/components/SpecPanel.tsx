@@ -21,7 +21,7 @@ export function SpecPanel({
   const nPass = results ? results.filter((a) => a.passed).length : 0;
 
   return (
-    <section className="card">
+    <section className="card spec">
       <h3>
         Spec vs measured
         {results && (

@@ -318,9 +318,30 @@ body {
 .hero {
   min-width: 0;
 }
+/* Right-column panels (spec, roadmap) fill the band height equally, so the
+   column has no dead gap. Their lists scroll, so adding rows fills the box
+   rather than stretching the page. */
+.card.spec,
+.card.roadmap {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 @media (max-width: 1000px) {
   .band {
     grid-template-columns: 1fr;
+  }
+  /* single column: no shared band height, so cap + scroll instead of fill */
+  .card.spec,
+  .card.roadmap {
+    flex: 0 1 auto;
+  }
+  .speclist {
+    max-height: 340px;
+  }
+  .checklist {
+    max-height: 260px;
   }
 }
 
@@ -559,7 +580,8 @@ body {
 .speclist {
   display: flex;
   flex-direction: column;
-  max-height: 340px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
 }
 .spec-row {
@@ -684,7 +706,8 @@ body {
   flex-direction: column;
   gap: 7px;
   font-size: 13px;
-  max-height: 260px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
 }
 .checklist li {

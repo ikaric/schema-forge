@@ -4,7 +4,7 @@ export function Roadmap({ roadmap }: { roadmap: RoadmapT }) {
   const { done, total } = roadmap.progress;
   const pct = total ? Math.round((done / total) * 100) : 0;
   return (
-    <section className="card">
+    <section className="card roadmap">
       <h3>
         Roadmap <span className="muted small">{done}/{total} verified</span>
       </h3>
