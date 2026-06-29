@@ -1,6 +1,7 @@
+import { marked } from "marked";
 import type { CurrentResult, Problem } from "../api/types";
 
-const STATUS_LABEL: Record<string, string> = {
+const STAMP: Record<string, string> = {
   verified: "Verified",
   converged: "Converged",
   failed: "Failed",
@@ -17,32 +18,51 @@ export function ProblemHeader({
 }) {
   if (!initialized) {
     return (
-      <section className="card problem">
-        <h2 className="problem-title">No circuit targeted yet</h2>
-        <p className="muted">
-          Run <code>/target</code> in Claude Code (or <code>make seed-example</code>)
-          to define a circuit and its target spec. This view updates live as the
-          harness works.
-        </p>
+      <section className="titleblock">
+        <div className="tb-main">
+          <p className="eyebrow">Untargeted sheet</p>
+          <h2 className="tb-name">No circuit targeted</h2>
+          <p className="tb-brief">
+            Run <code>/target</code> to define a circuit and its target spec.
+            This sheet updates live as the harness designs and verifies it.
+          </p>
+        </div>
       </section>
     );
   }
+
+  const status = current?.status;
+  const passed = current?.assertions.filter((a) => a.passed).length ?? 0;
+  const total = current?.assertions.length ?? 0;
+  // The statement is authored markdown — render it (trusted, local content).
+  // No `breaks`: let hard-wrapped source lines reflow into justified blocks.
+  const briefHtml = problem.statement
+    ? (marked.parse(problem.statement) as string)
+    : "";
+
   return (
-    <section className="card problem">
-      <div className="problem-head">
-        <h2 className="problem-title">{problem.title || "Untitled circuit"}</h2>
-        <div className="chips">
+    <section className="titleblock">
+      <div className="tb-main">
+        <p className="eyebrow">Circuit under design</p>
+        <h2 className="tb-name">{problem.title || "Untitled circuit"}</h2>
+        <div className="tb-chips">
           {problem.domain && <span className="chip">{problem.domain}</span>}
           {problem.tier && <span className="chip">{problem.tier}</span>}
-          {current && (
-            <span className={`chip status-${current.status}`}>
-              {STATUS_LABEL[current.status] ?? current.status}
-            </span>
-          )}
         </div>
+        {briefHtml && (
+          <div
+            className="tb-brief"
+            dangerouslySetInnerHTML={{ __html: briefHtml }}
+          />
+        )}
       </div>
-      {problem.statement && (
-        <p className="problem-statement">{problem.statement}</p>
+      {status && (
+        <div className={`stamp s-${status}`}>
+          {STAMP[status] ?? status}
+          <small>
+            spec {passed}/{total}
+          </small>
+        </div>
       )}
     </section>
   );

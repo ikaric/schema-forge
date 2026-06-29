@@ -68,6 +68,21 @@ export interface LogEntry {
   message: string;
 }
 
+export interface Component {
+  ref: string;
+  kind: string;
+  type: string;
+  value: string;
+  nodes: string[];
+}
+
+export interface FeedbackNote {
+  from: string;
+  msg: string;
+  status: string;
+  state: "open" | "done" | "planned";
+}
+
 export interface State {
   initialized: boolean;
   problem: Problem;
@@ -75,6 +90,9 @@ export interface State {
   roadmap: Roadmap;
   log: LogEntry[];
   current: CurrentResult | Record<string, never>;
+  components: Component[];
+  research: string;
+  feedback: FeedbackNote[];
   report_present: boolean;
   updated_at: string;
 }

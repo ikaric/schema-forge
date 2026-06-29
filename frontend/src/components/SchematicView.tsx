@@ -8,6 +8,7 @@ type Tab = "svg" | "circuitjs";
 export function SchematicView({ current }: { current?: CurrentResult }) {
   const svg = current?.schematic?.svg;
   const cjs = current?.schematic?.circuitjs;
+  const ver = current?.timestamp ?? "";
   const [tab, setTab] = useState<Tab>("svg");
   const [cjsText, setCjsText] = useState("");
 
@@ -17,25 +18,26 @@ export function SchematicView({ current }: { current?: CurrentResult }) {
       return;
     }
     let active = true;
-    fetch(artifactUrl(cjs))
+    fetch(`${artifactUrl(cjs)}?v=${ver}`)
       .then((r) => r.text())
       .then((t) => active && setCjsText(t))
       .catch(() => active && setCjsText(""));
     return () => {
       active = false;
     };
-  }, [cjs]);
+  }, [cjs, ver]);
 
   if (!svg && !cjs) {
     return (
       <section className="card schematic">
-        <h3>Schematic</h3>
-        <p className="muted">No schematic yet — run a simulation.</p>
+        <div className="bar">
+          <h3>Schematic</h3>
+        </div>
+        <p className="schematic-pad muted">No schematic yet — run a simulation.</p>
       </section>
     );
   }
 
-  // Falstad CircuitJS loads an arbitrary circuit from a compressed URL param.
   const falstadUrl = cjsText
     ? `https://www.falstad.com/circuit/circuitjs.html?hideSidebar=true&running=true&ctz=${LZString.compressToEncodedURIComponent(
         cjsText,
@@ -44,7 +46,7 @@ export function SchematicView({ current }: { current?: CurrentResult }) {
 
   return (
     <section className="card schematic">
-      <div className="tabs">
+      <div className="bar">
         <h3>Schematic</h3>
         <div className="tab-buttons">
           <button
@@ -59,23 +61,32 @@ export function SchematicView({ current }: { current?: CurrentResult }) {
           >
             Interactive
           </button>
+          {svg && tab === "svg" && (
+            <a
+              className="dl-btn"
+              href={`${artifactUrl(svg)}?v=${ver}`}
+              download="schematic.svg"
+            >
+              ↓ SVG
+            </a>
+          )}
         </div>
       </div>
 
       {tab === "svg" ? (
         svg ? (
-          <img className="schematic-svg" src={artifactUrl(svg)} alt="schematic" />
+          <img
+            className="schematic-svg"
+            src={`${artifactUrl(svg)}?v=${ver}`}
+            alt="schematic"
+          />
         ) : (
-          <p className="muted">No static diagram.</p>
+          <p className="schematic-pad muted">No static diagram.</p>
         )
       ) : (
         <div className="circuitjs">
           {falstadUrl ? (
-            <iframe
-              title="CircuitJS"
-              className="circuitjs-frame"
-              src={falstadUrl}
-            />
+            <iframe title="CircuitJS" className="circuitjs-frame" src={falstadUrl} />
           ) : (
             <p className="muted">No interactive circuit.</p>
           )}
