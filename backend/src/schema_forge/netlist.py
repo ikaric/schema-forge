@@ -105,9 +105,26 @@ def parse_netlist(text: str) -> Circuit:
 
     circuit = Circuit(title=title, raw_lines=logical)
 
+    in_control = False
     for line in logical[body_start:]:
         stripped = line.strip()
         if not stripped or stripped.startswith("*"):
+            continue
+        low = stripped.lower()
+        # ``.control … .endc`` wraps interactive ngspice commands (tran, meas,
+        # let, print, ac, dc, …). ngspice runs them, but they are NOT circuit
+        # devices, so we skip the block body — otherwise each command line is
+        # mis-parsed as a two-terminal part and pollutes the element list (which
+        # feeds the bill-of-materials panel and the schematic).
+        if low.startswith(".control"):
+            in_control = True
+            circuit.directives.append(stripped)
+            continue
+        if low.startswith(".endc"):
+            in_control = False
+            circuit.directives.append(stripped)
+            continue
+        if in_control:
             continue
         if stripped.startswith("."):
             circuit.directives.append(stripped)
