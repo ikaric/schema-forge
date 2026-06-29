@@ -74,6 +74,14 @@ class Paths:
         return self.design / "design-report.md"
 
     @property
+    def research_md(self) -> Path:
+        return self.design / "research.md"
+
+    @property
+    def feedback_md(self) -> Path:
+        return self.design / "feedback.md"
+
+    @property
     def state_json(self) -> Path:
         return self.design / "state.json"
 

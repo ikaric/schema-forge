@@ -8,8 +8,10 @@ from pathlib import Path
 from schema_forge.paths import Paths
 from schema_forge.state.reader import (
     build_state,
+    parse_feedback,
     parse_log,
     parse_problem,
+    parse_research,
     parse_roadmap,
 )
 from schema_forge.state.store import append_log, refresh_state
@@ -75,6 +77,39 @@ def test_refresh_state_writes_json(tmp_path) -> None:
     state = refresh_state(paths)
     assert paths.state_json.exists()
     assert json.loads(paths.state_json.read_text())["updated_at"] == state["updated_at"]
+
+
+def test_parse_feedback_states_and_fields() -> None:
+    md = (
+        "# Feedback\n\n"
+        "- [ ] **user** — Bias too low for symmetric clip · open\n"
+        "- [x] **critic** — Check bias at 0 C · addressed · pass 2\n"
+        "- [ ] **user** — Try germanium devices · queued\n"
+        "not a note line\n"
+    )
+    notes = parse_feedback(md)
+    assert [n["state"] for n in notes] == ["open", "done", "planned"]
+    assert notes[0]["from"] == "user"
+    assert notes[1]["status"] == "addressed · pass 2"  # status keeps inner separators
+    assert notes[2]["msg"] == "Try germanium devices"
+
+
+def test_parse_research_prefers_research_md_then_findings(tmp_path) -> None:
+    paths = _seed(tmp_path)
+    assert parse_research(paths) == ""  # nothing yet → placeholder in the UI
+    (paths.findings / "lit-fuzz-2026-06-29.md").write_text("# Fuzz Face\n\nA classic.")
+    survey = parse_research(paths)
+    assert "Fuzz Face" in survey and "lit-fuzz" in survey  # stitched from findings
+    paths.research_md.write_text("# Curated\n\nThe real survey.")
+    assert parse_research(paths) == "# Curated\n\nThe real survey."  # research.md wins
+
+
+def test_build_state_includes_research_and_feedback(tmp_path) -> None:
+    paths = _seed(tmp_path)
+    state = build_state(paths)
+    assert state["research"] == "" and state["feedback"] == []
+    paths.feedback_md.write_text("- [ ] **user** — make it louder · open\n")
+    assert build_state(paths)["feedback"][0]["msg"] == "make it louder"
 
 
 def test_latest_result_picked_by_mtime(tmp_path) -> None:
