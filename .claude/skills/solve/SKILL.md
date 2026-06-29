@@ -40,17 +40,20 @@ or limited, **halt and report it**; do not fix it yourself (see CLAUDE.md
 - Ensure the UI is up (start `make dev` / uvicorn on :8000 in the background if
   not), so the user sees this session live.
 - Read `design/PROBLEM.md`, `design/spec.md`, `design/ROADMAP.md`,
-  `design/LOG.md`, `design/findings/INDEX.md`, and `git log --oneline -n 15`.
-  Summarise where things stand in 2–3 sentences and append a `/solve` LOG line.
+  `design/LOG.md`, `design/research.md`, `design/feedback.md`,
+  `design/findings/INDEX.md`, and `git log --oneline -n 15`. Summarise where
+  things stand in 2–3 sentences and append a `/solve` LOG line.
 
 ## Step 2 — work loop (the verify cycle)
 
 Pick the highest-value **open** sub-goal from `ROADMAP.md` (one whose assertion
-is not yet passing). Then:
+is not yet passing) — but **open notes in `design/feedback.md` come first** (a
+reviewer or the user flagged them; close each with `- [x] … · addressed` once the
+simulation confirms it, never by relaxing a spec). Then:
 
-1. **Reference check** — if this needs a topology you haven't grounded, dispatch
-   **librarian** (known designs, datasheets, app notes; anti-reinvention). Notes
-   land in `findings/lit-*.md`.
+1. **Reference check** — consult `design/research.md` first; if it doesn't cover
+   the topology you need, dispatch **librarian** (known designs, datasheets, app
+   notes; anti-reinvention). Notes land in `findings/lit-*.md`.
 2. **Design** — dispatch **circuit-designer** (and the relevant domain
    specialist) to write or revise `design/netlists/<block>.cir`. The netlist
    **must** include `.measure`/`.four` cards whose names match the spec

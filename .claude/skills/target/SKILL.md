@@ -53,6 +53,9 @@ form, so **Read each before overwriting it** (the editor requires a read first);
   `## Progress` line `0 / N sub-goals verified.`
 - **`design/design-report.md`** — a short skeleton: title, problem, spec table,
   and "Design in progress." sections for schematic / measured results / BOM.
+- **`design/research.md`** — a one-line stub (e.g. `_Pending — run /research for
+  the prior-art survey._`) so the Research panel reads clean until the survey lands.
+- **`design/feedback.md`** — a `# Feedback` heading only; notes arrive via `/feedback`.
 - Append a `/target` entry to **`design/LOG.md`**.
 
 ## 3. Activate
@@ -72,5 +75,5 @@ what makes `/target` fast and finite (no design loop to get stuck in). Even a
 ## 4. Commit
 
 Commit `target: initialize <circuit name>` (author = the user; **no** Claude
-co-author trailer). Push. **Stop here** and tell the user to run **`/solve`** to
-begin the design loop.
+co-author trailer). Push. **Stop here** and tell the user to run **`/research`**
+(survey the prior art), then **`/solve`** to begin the design loop.

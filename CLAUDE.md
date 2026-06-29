@@ -80,10 +80,24 @@ and SPICE modelling. Honest accounting always beats the appearance of progress.
 - Claiming a design works without a passing simulation this session.
 - Relaxing a spec assertion so a weak design "passes".
 
+## The workflow (one clone, end to end)
+
+```
+/target                  bootstrap the problem + machine-checkable spec      (once)
+  → /research            survey prior art → design/research.md               (recommended)
+  → /solve               the autonomous verify cycle below; halts at N/N verified
+  → /feedback <notes.md> ingest review notes → another focused /solve pass   (iterate)
+  → /polish              datasheet-style design-report.md
+```
+
+`/target` and `/research` only **set up** (never design or simulate); `/solve`
+and `/feedback` run the verify cycle below; `/vector` adjusts strategy between
+runs.
+
 ## The verify cycle (the named pattern)
 
 ```
-reference check (librarian)        — is there a known topology? don't reinvent
+reference check (librarian)        — known topology? consult design/research.md; don't reinvent
   → draft/revise netlist (circuit-designer)   writes design/netlists/<block>.cir
   → simulate (simulator)            uv run schema-forge sim run → converge + assert
   → on non-converge or unmet spec:  feed errors + measured-vs-target deltas back
@@ -125,10 +139,16 @@ flows through markdown the frontend ingests:
   `` - `<iso-ts>` **<source>** — <message> ``
 - `design/findings/*.md` — the shared inter-agent notebook (see
   `findings/INDEX.md` for naming). Agents write here and report back.
+- `design/research.md` — the curated prior-art survey (`/research` writes it;
+  the Research panel renders it as markdown).
+- `design/feedback.md` — review/user notes as a checklist (`/feedback` appends;
+  the Feedback panel renders it). One note per line:
+  `` - [ ] **<from>** — <note> · <status> `` (`[x]` = addressed).
 - `design/design-report.md` — the canonical human-readable deliverable.
 
-Only the skills (`/target`, `/solve`, `/vector`, `/polish`) edit `ROADMAP.md`,
-commit, or push. Agents write to `findings/` and report back; they never commit.
+Only the skills (`/target`, `/research`, `/solve`, `/feedback`, `/vector`,
+`/polish`) edit `ROADMAP.md`, commit, or push. Agents write to `findings/` and
+report back; they never commit.
 
 ## Anti-defeatism / anti-overreach
 
@@ -183,6 +203,6 @@ Anthropic. This repository is presented as the user's own work.
 backend/src/schema_forge/       FastAPI server + the schema_forge CLI
 frontend/                       Vite + React SPA (served on :8000)
 design/                         the per-project state (markdown + artifacts)
-  PROBLEM.md spec.md ROADMAP.md LOG.md design-report.md state.json
-  netlists/ schematics/ sims/ findings/
+  PROBLEM.md spec.md ROADMAP.md LOG.md research.md feedback.md
+  design-report.md state.json   netlists/ schematics/ sims/ findings/
 ```

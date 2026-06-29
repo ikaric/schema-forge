@@ -1,10 +1,11 @@
 # Findings index
 
 `findings/` is the shared inter-agent notebook. Agents drop notes here and report
-back; only the skills (`/solve`, `/target`, `/vector`, `/polish`) edit ROADMAP.md
-or commit. Naming conventions (date = `YYYY-MM-DD`):
+back; only the skills (`/target`, `/research`, `/solve`, `/feedback`, `/vector`,
+`/polish`) edit ROADMAP.md or commit. Naming conventions (date = `YYYY-MM-DD`):
 
-- `lit-<topic>-<date>.md` — reference/topology/datasheet survey (librarian)
+- `lit-<topic>-<date>.md` — reference/topology/datasheet survey (librarian);
+  `/research` folds these into the canonical `design/research.md`
 - `sim-<topic>-<date>.md` — notable simulation finding (simulator)
 - `deadend-<topic>-<date>.md` — abandoned topology, with the precise reason
 - `review-<topic>-<date>.md` — adversarial design review (critic)
