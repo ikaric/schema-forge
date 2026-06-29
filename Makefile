@@ -51,15 +51,21 @@ up:
 	@if curl -fsS http://$(HOST):$(PORT)/api/health >/dev/null 2>&1; then \
 	  echo "schema-forge already live at http://$(HOST):$(PORT)"; \
 	else \
-	  $(MAKE) build; \
+	  ( cd frontend && npm run build ); \
 	  mkdir -p .claude/local; \
-	  nohup $(UV) run uvicorn schema_forge.api.asgi:app --host $(HOST) --port $(PORT) \
+	  nohup .venv/bin/uvicorn schema_forge.api.asgi:app --host $(HOST) --port $(PORT) \
 	    >> .claude/local/server.log 2>&1 < /dev/null & \
-	  echo "schema-forge serving (detached) at http://$(HOST):$(PORT) — logs: .claude/local/server.log"; \
+	  echo $$! > .claude/local/server.pid; \
+	  echo "schema-forge serving (detached, pid $$(cat .claude/local/server.pid)) at http://$(HOST):$(PORT) — logs: .claude/local/server.log"; \
 	fi
 
 down:
-	@pkill -f "uvicorn schema_forge.api.asgi" >/dev/null 2>&1 && echo "schema-forge stopped" || echo "schema-forge not running"
+	@pid=$$(cat .claude/local/server.pid 2>/dev/null); \
+	[ -n "$$pid" ] && kill $$pid 2>/dev/null || true; \
+	portpid=$$(lsof -ti tcp:$(PORT) 2>/dev/null); \
+	[ -n "$$portpid" ] && kill $$portpid 2>/dev/null || true; \
+	rm -f .claude/local/server.pid; \
+	echo "schema-forge stopped (was pid $${pid:-none})"
 
 frontend-dev:
 	cd frontend && npm run dev
