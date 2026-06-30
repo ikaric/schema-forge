@@ -360,28 +360,42 @@ def _cascade_svg(circuit: Circuit) -> tuple[str, set[str]] | None:  # noqa: C901
             d += elm.Resistor().at(out_pt).toy(0).label(f"{rload.name}\n{rload.value}")
             d += elm.Ground()
 
-    # feedback: a leftover resistor from a later emitter back to an earlier base
-    for r in circuit.by_kind("R"):
-        if r.name in used or len(r.nodes) < 2:
+    # Remaining R/C passives — feedback (emitter→earlier base), collector–base
+    # leak, emitter bypass — drawn as annotated branches on the already-placed
+    # stages, so a Fuzz-Face-class circuit keeps this readable cascade view rather
+    # than bailing to the rail fallback. Each pin of every transistor is a known
+    # point; a leftover we can't anchor at both ends stays unused, so to_svg falls
+    # back (the layout is never made worse, only more complete).
+    term_pt: dict[str, Any] = {}
+    for s in ordered:
+        q = q_elem[s["ref"]]
+        for node, pt in ((s["c"], q.collector), (s["b"], q.base), (s["e"], q.emitter)):
+            if not _is_ground(node):  # ground is never a routable pin
+                term_pt.setdefault(node.lower(), pt)
+    for el in circuit.elements:
+        if el.name in used or el.kind not in ("R", "C") or len(el.nodes) < 2:
             continue
-        n1, n2 = r.nodes[0], r.nodes[1]
-        if n2.lower() in base_pt and not _is_ground(n1):
-            tgt, src = n2, n1
-        elif n1.lower() in base_pt and not _is_ground(n2):
-            tgt, src = n1, n2
-        else:
-            continue
-        used.add(r.name)
-        src_q = next(
-            (q_elem[s["ref"]] for s in ordered if s["e"].lower() == src.lower()),
-            None,
-        )
-        start = src_q.emitter if src_q else base_pt[tgt.lower()]
-        d += elm.Line().at(start).toy(-1.2)
-        d += elm.Resistor().tox(base_pt[tgt.lower()][0] - 1.0).label(
-            f"{r.name} {r.value}"
-        )
-        d += elm.Wire("|-").to(base_pt[tgt.lower()])
+        la, lb = el.nodes[0].lower(), el.nodes[1].lower()
+        ta, tb = la in term_pt, lb in term_pt
+        sym = elm.Capacitor if el.kind == "C" else elm.Resistor
+        label = f"{el.name} {el.value}".strip()
+        if ta and tb:
+            # between two pins (feedback / collector–base leak): a return path
+            # routed below the stages back to the target pin.
+            pa, pb = term_pt[la], term_pt[lb]
+            d += elm.Line().at(pa).toy(min(pa[1], pb[1]) - 1.2)
+            d += sym().tox(pb[0]).label(label)
+            d += elm.Wire("|-").to(pb)
+            used.add(el.name)
+        elif (ta and _is_ground(lb)) or (tb and _is_ground(la)):
+            # shunt to ground (e.g. an emitter bypass cap): a parallel branch
+            # offset clear of whatever already drops from that pin, label outward.
+            d += elm.Line().at(term_pt[la] if ta else term_pt[lb]).right(1.8)
+            d += sym().toy(0.0).label(label, "right")
+            d += elm.Ground()
+            used.add(el.name)
+        # else (incl. a pin→supply bias pull-up, which doesn't lay out cleanly
+        # here): leave it unused so to_svg falls back — never a worse drawing.
 
     data = d.get_imagedata("svg")
     raw = data.decode("utf-8") if isinstance(data, bytes) else str(data)

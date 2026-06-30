@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from schema_forge.netlist import parse_netlist
 from schema_forge.render.plots import (
     _pick,
     _signal_vars,
@@ -13,12 +14,48 @@ from schema_forge.render.plots import (
     write_plots,
 )
 from schema_forge.render.schematic import (
+    _cascade_svg,
     extract_embedded_circuitjs,
     render_schematic,
     to_circuitjs,
     to_svg,
 )
 from schema_forge.sim.rawfile import Plot, parse_raw
+
+# A Fuzz-Face-class two-stage feedback pair: direct-coupled CE chain plus the
+# passives that used to force the rail fallback (global feedback Rfb, emitter
+# bypass Cb).
+FUZZ_FACE = """* two-stage feedback pair
+Vcc vcc 0 dc 9
+Vin in 0 SIN(0 0.01 1k) AC 1
+Cin in b1 2.2u
+Q1 c1 b1 0 QN
+Q2 c2 c1 e2 QN
+Rc1 vcc c1 33k
+Rc2 vcc c2 470
+Re2 e2 0 1k
+Rfb e2 b1 100k
+Cb e2 0 47u
+Cout c2 out 10u
+Rload out 0 100k
+.model QN NPN(Bf=200)
+.end
+"""
+
+# A CE stage with an RC bridging two non-pin nodes (mid -> out): the leftover can't
+# be anchored to transistor pins, so the cascade must decline and to_svg fall back.
+UNPLACEABLE = """* CE stage with a mid-network RC
+Vcc vcc 0 dc 12
+Vin in 0 SIN(0 0.01 1k)
+Cin in b 1u
+Q1 c b 0 QN
+Rc vcc c 4.7k
+Cout c mid 1u
+Rt mid out 2k
+Rload out 0 100k
+.model QN NPN(Bf=200)
+.end
+"""
 
 
 def _tran(**series: np.ndarray) -> Plot:
@@ -54,9 +91,28 @@ def test_embedded_circuitjs_override() -> None:
     emb = extract_embedded_circuitjs(netlist)
     assert emb is not None and "r 1 2 3 4 0 100" in emb
     # to_circuitjs prefers the embedded block verbatim.
-    from schema_forge.netlist import parse_netlist
-
     assert to_circuitjs(parse_netlist("t\nR1 1 2 100\n"), emb) == emb
+
+
+def test_cascade_draws_feedback_and_bypass_passives() -> None:
+    circuit = parse_netlist(FUZZ_FACE)
+    result = _cascade_svg(circuit)
+    assert result is not None
+    svg, used = result
+    # Every device is placed, so to_svg keeps the readable cascade view instead of
+    # bailing to the rail fallback on the leftover feedback/bypass passives.
+    assert {e.name for e in circuit.elements} <= used
+    assert "<svg" in svg[:300]
+
+
+def test_unplaceable_leftover_falls_back_cleanly() -> None:
+    circuit = parse_netlist(UNPLACEABLE)
+    result = _cascade_svg(circuit)
+    assert result is not None
+    # The mid-network RC can't be anchored, so coverage is incomplete...
+    assert not {e.name for e in circuit.elements} <= result[1]
+    # ...and to_svg falls back to the general layout without raising.
+    assert "<svg" in to_svg(circuit)[:300]
 
 
 def test_render_schematic_writes_files(sample_circuit, tmp_path) -> None:
