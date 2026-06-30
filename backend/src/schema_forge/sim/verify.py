@@ -81,15 +81,21 @@ def verify_netlist(
     assertion_results: list[AssertionResult] = evaluate(spec, measured, failed)
 
     plot_rel: list[str] = []
-    if res.converged and res.raw_path is not None:
-        try:
-            from schema_forge.render.plots import write_plots
+    try:
+        from schema_forge.render.plots import clear_plots, write_plots
 
+        # Always clear last run's plot JSONs first, so a run that newly fails or
+        # drops an analysis (e.g. no longer sweeps AC) can't leave a stale figure
+        # on the dashboard. Then (re)render only for a converged run that wrote a
+        # rawfile — a converged .control-only deck legitimately produces none, and
+        # we don't want to plot the partial output of an aborted run.
+        clear_plots(paths.sims, stem)
+        if res.converged and res.raw_path is not None:
             plots = parse_raw(res.raw_path)
             for p in write_plots(plots, paths.sims, stem):
                 plot_rel.append(_rel(p, paths.design))
-        except Exception as exc:  # rendering must never fail verification
-            log.warning("plot rendering failed: %s", exc)
+    except Exception as exc:  # rendering must never fail verification
+        log.warning("plot rendering failed: %s", exc)
 
     schematic_rel: dict[str, str] = {}
     if render:

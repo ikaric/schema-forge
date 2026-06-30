@@ -1,9 +1,12 @@
 """Run a netlist through ngspice in batch mode and classify convergence.
 
 ngspice's exit code is unreliable (it frequently returns 0 even when an analysis
-fails), so we classify the *output* instead: a run "converged" when no
-convergence/fatal error markers appear and a non-empty rawfile was produced.
-Non-convergence is the harness's free, compiler-error-style correctness gate.
+fails), so we classify the *output of the measurement pass* instead: a run
+"converged" when no convergence/fatal error markers appear in it. The rawfile is
+written only for the signal plots and never gates the verdict — conflating the
+two would fail a perfectly solved deck merely for its *style* (a ``.control``-only
+deck writes no rawfile). Non-convergence is the harness's free,
+compiler-error-style correctness gate.
 """
 
 from __future__ import annotations
@@ -106,8 +109,9 @@ def run_ngspice(
     and ``.four`` ("No .measure possible in batch mode (-b) with -r rawfile
     set!"). So we run once **without** ``-r`` to capture the measurement output
     that verification depends on, and once **with** ``-r`` to write the rawfile
-    used only for the signal plots. The measures (the trust root) never depend on
-    the rawfile pass.
+    used only for the signal plots. The measures (the trust root) and the
+    convergence verdict both come from pass 1 alone; the rawfile pass only feeds
+    plots, so its absence or timeout degrades plots, never the verdict.
     """
     settings = settings or get_settings()
     netlist_path = Path(netlist_path).resolve()
@@ -124,16 +128,23 @@ def run_ngspice(
             "(e.g. `sudo pacman -S ngspice` / `brew install ngspice`)."
         ) from exc
     # Pass 2 — rawfile for plots (with -r). Measures are intentionally disabled.
-    r_rc, _r_out, _r_err = _run_once(
-        base + ["-r", str(raw_path), str(netlist_path)], settings, cwd
-    )
+    # Clear any stale rawfile first: ngspice writes the file only when a dot-card
+    # analysis runs, so without this a deck that no longer emits one would inherit
+    # the *previous* run's rawfile and plot stale signals.
+    raw_path.unlink(missing_ok=True)
+    _run_once(base + ["-r", str(raw_path), str(netlist_path)], settings, cwd)
 
+    # Convergence is read from the measurement pass (pass 1) alone: no
+    # convergence/fatal markers in its output. A missing/empty rawfile (a legit
+    # .control-only deck writes none) or a pass-2 timeout never flips the verdict.
     errors, warnings = _classify(f"{m_out}\n{m_err}")
-    if 124 in (m_rc, r_rc):
+    if m_rc == 124:
         errors.append(f"simulation exceeded {settings.sim_timeout_s}s timeout")
-    has_raw = raw_path.exists() and raw_path.stat().st_size > 0
-    converged = not errors and has_raw
+    if not f"{m_out}{m_err}".strip():
+        errors.append("ngspice produced no output (the netlist did not run)")
+    converged = not errors
 
+    has_raw = raw_path.exists() and raw_path.stat().st_size > 0
     return NgspiceResult(
         returncode=m_rc,
         stdout=m_out,
