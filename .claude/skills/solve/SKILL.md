@@ -86,7 +86,7 @@ user track progress in realtime — not just the final promote. Then:
 
 ## Step 3 — session end
 
-Refresh the rollup (`uv run schema-forge state > /dev/null`), recompute the `ROADMAP.md`
+Refresh the rollup (`uv run schema-forge state --write > /dev/null`), recompute the `ROADMAP.md`
 progress meter, update `STATUS.md` (focus + blocker), commit `status: <summary>`,
 and push.
 

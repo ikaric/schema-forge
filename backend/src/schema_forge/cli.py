@@ -17,6 +17,7 @@ commands:
   sim ...       run/verify a netlist        (see: schema-forge sim run -h)
   render ...    render schematics/plots     (see: schema-forge render -h)
   state         print the live state rollup as JSON
+                  --write also persists it to design/state.json
   serve         run the FastAPI server on the configured host/port
 """
 
@@ -53,9 +54,19 @@ def main(argv: list[str] | None = None) -> int:
         return render_main(rest)
     if command == "state":
         from schema_forge.paths import Paths
-        from schema_forge.state.reader import build_state
 
-        print(json.dumps(build_state(Paths.discover()), indent=2))
+        paths = Paths.discover()
+        # `state` only prints; `state --write` also persists design/state.json —
+        # the committed on-disk snapshot the skills refresh at promotion. (The
+        # live UI rebuilds from markdown per request and is unaffected either way.)
+        if "--write" in rest:
+            from schema_forge.state.store import refresh_state
+
+            print(json.dumps(refresh_state(paths), indent=2))
+        else:
+            from schema_forge.state.reader import build_state
+
+            print(json.dumps(build_state(paths), indent=2))
         return 0
     if command == "serve":
         return _serve()

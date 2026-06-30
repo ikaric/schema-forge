@@ -61,7 +61,7 @@ form, so **Read each before overwriting it** (the editor requires a read first);
 ## 3. Activate + bring up the live UI
 
 - Remove the template marker: `rm design/.schemaforge-template`.
-- Refresh the rollup: `uv run schema-forge state > /dev/null` (writes `design/state.json`).
+- Refresh the rollup: `uv run schema-forge state --write > /dev/null` (writes `design/state.json`).
 - **Set up and serve in one shot — the user should never need a second terminal
   for `make dev`.** Run `make setup` (installs backend + frontend deps; safe to
   re-run), then **`make up`** — it builds the SPA and serves it + the live

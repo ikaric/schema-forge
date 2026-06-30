@@ -37,7 +37,7 @@ absent) as:
 ```
 
 Do **not** put ` · ` inside the note text — that separates the status. Refresh
-the rollup (`uv run schema-forge state > /dev/null`) so the notes appear in the
+the rollup (`uv run schema-forge state --write > /dev/null`) so the notes appear in the
 Feedback panel immediately, append a `/feedback` LOG line, and commit
 `feedback: ingest <n> note(s)` (no Claude co-author) + push.
 
