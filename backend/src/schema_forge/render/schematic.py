@@ -187,6 +187,11 @@ def _model_polarity(circuit: Circuit) -> dict[str, bool]:
     return pol
 
 
+def _is_npn(pol: dict[str, bool], value: str | None) -> bool:
+    """NPN (True) unless the device's ``.model`` is explicitly PNP/PMOS."""
+    return pol.get(value.split()[0].lower(), True) if value else True
+
+
 # Blueprint palette. The schematic sits on its own darker "drawing board" so it
 # reads as a distinct surface against the page's lighter blueprint field, with a
 # faint grayish-white grid (deliberately quieter than the page grid).
@@ -264,7 +269,7 @@ def _cascade_svg(circuit: Circuit) -> tuple[str, set[str]] | None:  # noqa: C901
     rail_pts: list[Any] = []
     for i, s in enumerate(ordered):
         x = 2 + i * gap
-        npn = pol.get(s["val"].split()[0].lower(), True) if s["val"] else True
+        npn = _is_npn(pol, s["val"])
         bjt = elm.BjtNpn if npn else elm.BjtPnp
         q = bjt(circle=True).anchor("base").at((x, 3)).label(
             f"{s['ref']}\n{s['val']}", "right", ofst=(0.1, -0.6))
@@ -611,7 +616,7 @@ def _barycentre_order(
     return net_order, devs
 
 
-def _general_svg(circuit: Circuit) -> str:
+def _general_svg(circuit: Circuit) -> str:  # noqa: C901
     """Draw *every* device of *circuit* via the general rail layout (see above)."""
     nets = [n for n in circuit.nodes if not _is_ground(n)]
     net_order, devs = _barycentre_order(circuit, nets)
@@ -624,16 +629,17 @@ def _general_svg(circuit: Circuit) -> str:
         x = _G_X0 + i * _G_COL_W
         ns = dev.nodes
         if dev.kind in ("Q", "J", "Z") and len(ns) >= 3:
-            cN, bN, eN = ns[0], ns[1], ns[2]
-            ys = [yof[n] for n in (cN, bN, eN) if not _is_ground(n) and n in yof]
+            # yof holds only non-ground nets, so `n in yof` already means "live".
+            c_net, b_net, e_net = ns[0], ns[1], ns[2]
+            ys = [yof[n] for n in (c_net, b_net, e_net) if n in yof]
             cy = sum(ys) / len(ys) if ys else _G_Y0
-            yc = yof[cN] if (not _is_ground(cN) and cN in yof) else cy - 46
-            ye = yof[eN] if (not _is_ground(eN) and eN in yof) else cy + 46
-            yb = yof[bN] if (not _is_ground(bN) and bN in yof) else cy
-            npn = pol.get((dev.value or "").split()[0].lower(), True) if dev.value else True
+            yc = yof[c_net] if c_net in yof else cy - 46
+            ye = yof[e_net] if e_net in yof else cy + 46
+            yb = yof[b_net] if b_net in yof else cy
+            npn = _is_npn(pol, dev.value)
             _g_transistor(sh, x, cy, yc, yb, ye, dev.name, dev.value or "", npn)
-            for net, yy, xx in ((cN, yc, x), (eN, ye, x), (bN, yb, x - 26)):
-                if _is_ground(net) or net not in yof:
+            for net, yy, xx in ((c_net, yc, x), (e_net, ye, x), (b_net, yb, x - 26)):
+                if net not in yof:
                     _g_ground(sh, xx, yy)
                 else:
                     conn[net].append(xx)
