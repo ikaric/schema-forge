@@ -35,3 +35,9 @@ converged-but-unmet.
 - Never weaken the spec to make something pass. Report reality. If a measure is
   missing, say so (the netlist's `.measure` card name probably doesn't match the
   spec's `measure` field).
+- **Recognise the batch-mode footguns** so feedback is actionable, not just "it
+  failed": *"no data saved for A.C. … run aborted"* means a dot-card `.measure`
+  collided with having both `.tran` and `.ac` — tell the designer to move multi-
+  analysis measures into a `.control` block (see `docs/deck-authoring.md`). A
+  `verified` deck that simply shows no plots is fine — a `.control`-only deck
+  writes no rawfile by design; that is not a failure.

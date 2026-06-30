@@ -135,6 +135,16 @@ For the netlist to be checkable, it must contain `.measure` (and/or `.four`)
 cards whose result names exactly match the `measure` field of each spec
 assertion. The circuit-designer writes those cards to match `design/spec.md`.
 
+The run is **two ngspice passes**: a measurement pass (no `-r`) that is the trust
+root for convergence + every scalar, and a rawfile pass (`-r`) that only feeds the
+plots. So convergence is decided by the measurement pass *alone* — a legitimate
+`.control`-only deck that writes no rawfile is `verified`, not `failed`; a missing
+rawfile just means no plots. Batch mode has real footguns (a dot-card `.measure`
+plus *both* `.tran` and `.ac` aborts the run; `db()` parses only inside
+`.control`; `.control` analyses aren't captured to the rawfile). **`docs/deck-authoring.md`**
+is the short guide + two ngspice-verified deck templates — consult it before
+hand-authoring a non-trivial deck.
+
 ## State lives in markdown — NOT GitHub Issues
 
 This harness deliberately does **not** use GitHub Issues. All inter-agent state
